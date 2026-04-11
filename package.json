@@ -1,0 +1,17 @@
+{
+  "name": "graydeck-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "node ./scripts/dev.mjs",
+    "dev:web": "pnpm --filter graydeck-web dev",
+    "dev:server": "node ./scripts/run-air.mjs",
+    "dev:server:install": "go install github.com/air-verse/air@latest",
+    "build": "pnpm run build:server && pnpm run build:web",
+    "build:web": "pnpm --filter graydeck-web build",
+    "build:server": "node ./scripts/go-build.mjs",
+    "check": "pnpm run check:server && pnpm run check:web",
+    "check:web": "pnpm --filter graydeck-web exec tsc -p tsconfig.app.json --noEmit",
+    "check:server": "node ./scripts/go-build.mjs"
+  }
+}

@@ -1,0 +1,14 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/managerd.exe ./cmd/managerd"
+bin = "./tmp/managerd.exe"
+full_bin = "./tmp/managerd.exe"
+include_ext = ["go", "json", "yaml", "yml"]
+exclude_dir = ["web", "node_modules", "tmp", "dist", ".git", ".gocache"]
+delay = 200
+stop_on_error = true
+
+[log]
+time = true
