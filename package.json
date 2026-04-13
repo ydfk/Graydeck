@@ -11,6 +11,12 @@
     "build:server": "node ./scripts/go-build.mjs",
     "check": "pnpm run check:server && pnpm run check:web",
     "check:web": "pnpm --filter graydeck-web exec tsc -p tsconfig.app.json --noEmit",
-    "check:server": "node ./scripts/go-build.mjs"
+    "check:server": "node ./scripts/go-build.mjs",
+    "docker:build": "node ./scripts/docker-build.mjs",
+    "docker:push": "node ./scripts/docker-push.mjs",
+    "docker:buildPush": "node ./scripts/docker-build-push.mjs",
+    "build:docker": "node ./scripts/docker-build.mjs",
+    "push:docker": "node ./scripts/docker-push.mjs",
+    "buildPush:docker": "node ./scripts/docker-build-push.mjs"
   }
 }

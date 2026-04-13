@@ -39,6 +39,12 @@ type SubscriptionPreview struct {
 	Content string `json:"content"`
 }
 
+type RuntimeConfigPreview struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
 type LogEntry struct {
 	At      string `json:"at"`
 	Message string `json:"message"`

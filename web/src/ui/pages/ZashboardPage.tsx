@@ -1,99 +1,99 @@
-import { useEffect, useMemo, useState, type SyntheticEvent } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiPost } from '@/api/client'
-import { useSystemStatus } from '@/api/queries'
-import { useI18n } from '@/i18n/I18nProvider'
-import type { SystemStatus } from '@/types/api'
-import { Panel } from '@/ui/components/Panel'
+import { useEffect, useMemo, useState, type SyntheticEvent } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiPost } from "@/api/client";
+import { useSystemStatus } from "@/api/queries";
+import { useI18n } from "@/i18n/I18nProvider";
+import type { SystemStatus } from "@/types/api";
+import { Panel } from "@/ui/components/Panel";
 
 export function ZashboardPage() {
-  const { t } = useI18n()
-  const queryClient = useQueryClient()
-  const statusQuery = useSystemStatus()
-  const [isFullscreen, setIsFullscreen] = useState(false)
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const statusQuery = useSystemStatus();
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const dashboardBackend = useMemo(() => {
-    const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
+    const port = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
     return {
       disableTunMode: true,
       disableUpgradeCore: true,
       host: window.location.hostname,
-      label: 'Graydeck',
-      password: '',
+      label: "Graydeck",
+      password: "",
       port,
-      protocol: window.location.protocol.replace(':', ''),
-      secondaryPath: '/api/clash',
-      uuid: 'graydeck-embedded',
-    }
-  }, [])
+      protocol: window.location.protocol.replace(":", ""),
+      secondaryPath: "/api/clash",
+      uuid: "graydeck-embedded",
+    };
+  }, []);
 
-  const dashboardUrl = '/zashboard-ui/'
+  const dashboardUrl = "/zashboard-ui/";
 
   useEffect(() => {
-    localStorage.setItem('setup/api-list', JSON.stringify([dashboardBackend]))
-    localStorage.setItem('setup/active-uuid', dashboardBackend.uuid)
-  }, [dashboardBackend])
+    localStorage.setItem("setup/api-list", JSON.stringify([dashboardBackend]));
+    localStorage.setItem("setup/active-uuid", dashboardBackend.uuid);
+  }, [dashboardBackend]);
 
   const updateMutation = useMutation({
-    mutationFn: () => apiPost<SystemStatus>('/api/zashboard/update'),
+    mutationFn: () => apiPost<SystemStatus>("/api/zashboard/update"),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['system-status'] })
+      await queryClient.invalidateQueries({ queryKey: ["system-status"] });
     },
-  })
+  });
 
-  const status = statusQuery.data
+  const status = statusQuery.data;
   function formatVersion(value: string, fallback: string) {
     if (!value) {
-      return fallback
+      return fallback;
     }
 
-    if (value === 'installed') {
-      return t('common.installed')
+    if (value === "installed" || value === "unknown") {
+      return t("core.unknown");
     }
 
-    return value
+    return value;
   }
 
   const versionStatus = useMemo(() => {
     if (!status) {
-      return t('common.loading')
+      return t("common.loading");
     }
 
     if (!status.zashboardReady) {
-      return t('zashboard.notReady')
+      return t("zashboard.notReady");
     }
 
     if (status.zashboardIsLatest) {
-      return t('zashboard.isLatest')
+      return t("zashboard.isLatest");
     }
 
-    if (status.zashboardVersion === '') {
-      return t('zashboard.ready')
+    if (status.zashboardVersion === "") {
+      return t("zashboard.ready");
     }
 
-    return t('zashboard.hasUpdate')
-  }, [status, t])
+    return t("zashboard.hasUpdate");
+  }, [status, t]);
 
   function getZashboardBadgeClass() {
     if (!status?.zashboardReady) {
-      return 'badge danger'
+      return "badge danger";
     }
 
     if (status.zashboardIsLatest) {
-      return 'badge active'
+      return "badge active";
     }
 
-    return 'badge warning'
+    return "badge warning";
   }
 
   function handleFrameLoad(event: SyntheticEvent<HTMLIFrameElement>) {
-    const doc = event.currentTarget.contentDocument
-    if (!doc || doc.getElementById('graydeck-zashboard-style')) {
-      return
+    const doc = event.currentTarget.contentDocument;
+    if (!doc || doc.getElementById("graydeck-zashboard-style")) {
+      return;
     }
 
-    const style = doc.createElement('style')
-    style.id = 'graydeck-zashboard-style'
+    const style = doc.createElement("style");
+    style.id = "graydeck-zashboard-style";
     style.textContent = `
       a[href*="settings"],
       button[aria-label*="Settings"],
@@ -103,24 +103,24 @@ export function ZashboardPage() {
       [data-route="settings"] {
         display: none !important;
       }
-    `
-    doc.head?.appendChild(style)
+    `;
+    doc.head?.appendChild(style);
   }
 
   const title = status ? (
     <span className="panel-title-inline">
-      <span>{t('zashboard.title')}</span>
+      <span>{t("zashboard.title")}</span>
       <span className="panel-title-meta">
-        {t('zashboard.currentVersion')} {formatVersion(status.zashboardVersion, t('core.notReady'))}
+        {t("zashboard.currentVersion")} {formatVersion(status.zashboardVersion, t("core.notReady"))}
       </span>
       <span className="panel-title-meta">
-        {t('zashboard.latestVersion')} {formatVersion(status.zashboardLatestVersion, t('core.unknown'))}
+        {t("zashboard.latestVersion")} {formatVersion(status.zashboardLatestVersion, t("core.unknown"))}
       </span>
       <span className={getZashboardBadgeClass()}>{versionStatus}</span>
     </span>
   ) : (
-    t('zashboard.title')
-  )
+    t("zashboard.title")
+  );
 
   return (
     <div className="page-grid">
@@ -133,10 +133,10 @@ export function ZashboardPage() {
               onClick={() => updateMutation.mutate()}
               type="button"
             >
-              {updateMutation.isPending ? t('common.loading') : t('zashboard.updateNow')}
+              {updateMutation.isPending ? t("common.loading") : t("zashboard.updateNow")}
             </button>
             <button className="primary-pill" onClick={() => setIsFullscreen(true)} type="button">
-              {t('common.fullscreen')}
+              {t("common.fullscreen")}
             </button>
           </>
         }
@@ -152,24 +152,19 @@ export function ZashboardPage() {
             </div>
           </div>
         ) : (
-          <p className="body-copy">{t('common.loading')}</p>
+          <p className="body-copy">{t("common.loading")}</p>
         )}
 
         {isFullscreen ? (
           <div className="fullscreen-backdrop" onClick={() => setIsFullscreen(false)} role="presentation">
-            <div
-              aria-modal="true"
-              className="fullscreen-card"
-              onClick={(event) => event.stopPropagation()}
-              role="dialog"
-            >
+            <div aria-modal="true" className="fullscreen-card" onClick={(event) => event.stopPropagation()} role="dialog">
               <div className="fullscreen-header">
                 <span className="panel-title-inline">
-                  <span>{t('zashboard.title')}</span>
+                  <span>{t("zashboard.title")}</span>
                   <span className={getZashboardBadgeClass()}>{versionStatus}</span>
                 </span>
                 <button className="secondary-pill" onClick={() => setIsFullscreen(false)} type="button">
-                  {t('common.close')}
+                  {t("common.close")}
                 </button>
               </div>
               <iframe
@@ -183,5 +178,5 @@ export function ZashboardPage() {
         ) : null}
       </Panel>
     </div>
-  )
+  );
 }

@@ -1,0 +1,15 @@
+.git
+.gitignore
+.history
+.logs
+.gocache
+node_modules
+web/node_modules
+web/.vite
+web/dist
+tmp
+coverage
+*.log
+data
+DOCKER_IMAGE_DESIGN.md
+README.md

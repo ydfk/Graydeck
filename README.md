@@ -83,17 +83,14 @@ pnpm run dev:web
 ## 可用环境变量
 
 ```powershell
-$env:MGR_LISTEN=":18080"
-$env:GRAYDECK_DATA_DIR=".\data"
-$env:GRAYDECK_CORE_OS="linux"
-$env:GRAYDECK_CORE_ARCH="amd64"
+$env:GRAYDECK_SECRET="graydeck-secret"
 ```
 
 说明：
 
-- `GRAYDECK_DATA_DIR` 用来指定运行时数据目录
-- `GRAYDECK_CORE_OS` / `GRAYDECK_CORE_ARCH` 用来指定自动下载的核心目标平台
-- 在 Docker 镜像里通常会使用 `linux` / `amd64` 或 `linux` / `arm64`
+- `GRAYDECK_SECRET` 用来设置控制面密钥
+- `MGR_LISTEN` 也已固定为 `:18080`，不再通过环境变量覆盖
+- `GRAYDECK_DATA_DIR` / `GRAYDECK_WEB_ROOT` / `GRAYDECK_CORE_OS` / `GRAYDECK_CORE_ARCH` / `GRAYDECK_CONTROLLER_ADDR` / `GRAYDECK_MIXED_PORT` 已改为程序内固定策略，不再通过环境变量覆盖
 
 ## 当前行为
 
@@ -147,4 +144,59 @@ pnpm run check
 
 ```powershell
 pnpm run build
+```
+
+## Docker
+
+仓库已提供：
+
+- `Dockerfile`
+- `.dockerignore`
+- `docker-compose.example.yml`
+
+示例（本地 compose 启动）：
+
+```powershell
+docker compose -f docker-compose.example.yml up -d --build
+```
+
+访问地址：
+
+- `http://localhost:8080`
+
+Compose 示例还额外映射了常用 mihomo 端口：`7890`、`7891`、`7892`、`7893`（含必要 UDP），便于直接在宿主机使用代理能力。
+
+`cap_add: NET_ADMIN` 与 `/dev/net/tun` 设备挂载仅在你需要 TUN/透明代理时才必须；如果只使用普通 HTTP/SOCKS 代理，可移除这两项。
+
+## DockerHub 镜像发布脚本
+
+支持 3 个脚本：`buil`、`push`、`buildPush`（同时也提供 `docker:*` 同义命令）。
+
+传参规则：
+
+- 仅支持命令行参数，不再读取环境变量
+- 未传必需参数时会直接退出，不会执行打包/推送
+
+设置镜像仓库（示例）：
+
+```powershell
+pnpm run build:docker -- --DOCKERHUB_REPO=your-user/graydeck
+```
+
+仅构建（自动按时间生成版本号，如 `202604132146`）：
+
+```powershell
+pnpm run buil -- your-user/graydeck
+```
+
+仅推送指定 tag：
+
+```powershell
+pnpm run push -- your-user/graydeck 202604132146
+```
+
+一键构建并推送（自动时间版本 + `latest`）：
+
+```powershell
+pnpm run buildPush -- your-user/graydeck
 ```

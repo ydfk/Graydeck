@@ -1,0 +1,24 @@
+services:
+  graydeck:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: your-dockerhub-user/graydeck:latest
+    container_name: graydeck
+    restart: unless-stopped
+    ports:
+      - "8080:18080"
+      - "7890:7890/tcp"
+      - "7890:7890/udp"
+      - "7891:7891/tcp"
+      - "7892:7892/tcp"
+      - "7893:7893/tcp"
+      - "7893:7893/udp"
+    environment:
+      GRAYDECK_SECRET: "change-this-secret"
+    volumes:
+      - ./data:/data
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun

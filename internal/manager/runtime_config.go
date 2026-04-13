@@ -7,9 +7,12 @@ import (
 )
 
 type managedRuntimeValues struct {
-	mixedPort     string
-	controller    string
-	secret        string
+	mixedPort  string
+	socksPort  string
+	redirPort  string
+	tproxyPort string
+	controller string
+	secret     string
 }
 
 func (s *Service) ensureBaseConfig() error {
@@ -24,12 +27,15 @@ func (s *Service) defaultBaseConfigContent() string {
 	return strings.TrimSpace(fmt.Sprintf(`
 # Graydeck 自动注入的基础配置
 mixed-port: %s
+socks-port: %s
+redir-port: %s
+tproxy-port: %s
 external-controller: %s
 secret: %s
 allow-lan: false
 mode: rule
 log-level: info
-`, yamlScalar(s.cfg.RuntimeMixedPort), yamlString(s.cfg.ControllerAddr), yamlString(s.cfg.RuntimeSecret))) + "\n"
+`, yamlScalar(s.cfg.RuntimeMixedPort), yamlScalar(s.cfg.RuntimeSocksPort), yamlScalar(s.cfg.RuntimeRedirPort), yamlScalar(s.cfg.RuntimeTProxyPort), yamlString(s.cfg.ControllerAddr), yamlString(s.cfg.RuntimeSecret))) + "\n"
 }
 
 func (s *Service) writeRuntimeConfig(sourcePath, targetPath string) error {
@@ -58,15 +64,21 @@ func (s *Service) writeRuntimeConfig(sourcePath, targetPath string) error {
 
 	values := parseManagedRuntimeValues(string(baseConfig), managedRuntimeValues{
 		mixedPort:  s.cfg.RuntimeMixedPort,
+		socksPort:  s.cfg.RuntimeSocksPort,
+		redirPort:  s.cfg.RuntimeRedirPort,
+		tproxyPort: s.cfg.RuntimeTProxyPort,
 		controller: s.cfg.ControllerAddr,
 		secret:     s.cfg.RuntimeSecret,
 	})
 
 	managedSection := strings.TrimSpace(fmt.Sprintf(`
 mixed-port: %s
+socks-port: %s
+redir-port: %s
+tproxy-port: %s
 external-controller: %s
 secret: %s
-`, yamlScalar(values.mixedPort), yamlString(values.controller), yamlString(values.secret)))
+`, yamlScalar(values.mixedPort), yamlScalar(values.socksPort), yamlScalar(values.redirPort), yamlScalar(values.tproxyPort), yamlString(values.controller), yamlString(values.secret)))
 
 	baseExtraSection := strings.TrimSpace(stripTopLevelKeys(string(baseConfig), managedKeys...))
 	subscriptionSection := strings.TrimSpace(stripTopLevelKeys(string(content), managedKeys...))
@@ -180,6 +192,12 @@ func parseManagedRuntimeValues(content string, fallback managedRuntimeValues) ma
 		switch {
 		case strings.HasPrefix(trimmed, "mixed-port:"):
 			values.mixedPort = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "mixed-port:")))
+		case strings.HasPrefix(trimmed, "socks-port:"):
+			values.socksPort = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "socks-port:")))
+		case strings.HasPrefix(trimmed, "redir-port:"):
+			values.redirPort = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "redir-port:")))
+		case strings.HasPrefix(trimmed, "tproxy-port:"):
+			values.tproxyPort = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "tproxy-port:")))
 		case strings.HasPrefix(trimmed, "external-controller:"):
 			values.controller = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "external-controller:")))
 		case strings.HasPrefix(trimmed, "secret:"):

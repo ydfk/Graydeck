@@ -7,46 +7,32 @@ import (
 )
 
 type Config struct {
-	ListenAddress   string
-	DataDir         string
-	CoreTargetOS    string
-	CoreTargetArch  string
-	ControllerAddr  string
-	RuntimeMixedPort string
-	RuntimeSecret   string
-	BaseConfigPath  string
+	ListenAddress     string
+	DataDir           string
+	CoreTargetOS      string
+	CoreTargetArch    string
+	ControllerAddr    string
+	RuntimeMixedPort  string
+	RuntimeSocksPort  string
+	RuntimeRedirPort  string
+	RuntimeTProxyPort string
+	RuntimeSecret     string
+	BaseConfigPath    string
+	WebRoot           string
 }
 
 func LoadConfigFromEnv() Config {
-	listenAddress := os.Getenv("MGR_LISTEN")
-	if listenAddress == "" {
-		listenAddress = ":18080"
-	}
+	listenAddress := ":18080"
 
-	dataDir := os.Getenv("GRAYDECK_DATA_DIR")
-	if dataDir == "" {
-		dataDir = filepath.Join(".", "data")
-	}
-
-	coreTargetOS := os.Getenv("GRAYDECK_CORE_OS")
-	if coreTargetOS == "" {
-		coreTargetOS = runtime.GOOS
-	}
-
-	coreTargetArch := os.Getenv("GRAYDECK_CORE_ARCH")
-	if coreTargetArch == "" {
-		coreTargetArch = runtime.GOARCH
-	}
-
-	controllerAddr := os.Getenv("GRAYDECK_CONTROLLER_ADDR")
-	if controllerAddr == "" {
-		controllerAddr = "127.0.0.1:19090"
-	}
-
-	runtimeMixedPort := os.Getenv("GRAYDECK_MIXED_PORT")
-	if runtimeMixedPort == "" {
-		runtimeMixedPort = "7890"
-	}
+	dataDir := defaultDataDir()
+	webRoot := defaultWebRoot()
+	coreTargetOS := runtime.GOOS
+	coreTargetArch := runtime.GOARCH
+	controllerAddr := "127.0.0.1:19090"
+	runtimeMixedPort := "7890"
+	runtimeSocksPort := "7891"
+	runtimeRedirPort := "7892"
+	runtimeTProxyPort := "7893"
 
 	runtimeSecret := os.Getenv("GRAYDECK_SECRET")
 	if runtimeSecret == "" {
@@ -59,13 +45,35 @@ func LoadConfigFromEnv() Config {
 	}
 
 	return Config{
-		ListenAddress:    listenAddress,
-		DataDir:          dataDir,
-		CoreTargetOS:     coreTargetOS,
-		CoreTargetArch:   coreTargetArch,
-		ControllerAddr:   controllerAddr,
-		RuntimeMixedPort: runtimeMixedPort,
-		RuntimeSecret:    runtimeSecret,
-		BaseConfigPath:   baseConfigPath,
+		ListenAddress:     listenAddress,
+		DataDir:           dataDir,
+		CoreTargetOS:      coreTargetOS,
+		CoreTargetArch:    coreTargetArch,
+		ControllerAddr:    controllerAddr,
+		RuntimeMixedPort:  runtimeMixedPort,
+		RuntimeSocksPort:  runtimeSocksPort,
+		RuntimeRedirPort:  runtimeRedirPort,
+		RuntimeTProxyPort: runtimeTProxyPort,
+		RuntimeSecret:     runtimeSecret,
+		BaseConfigPath:    baseConfigPath,
+		WebRoot:           webRoot,
 	}
+}
+
+func defaultDataDir() string {
+	const containerDataDir = "/data"
+	if info, err := os.Stat(containerDataDir); err == nil && info.IsDir() {
+		return containerDataDir
+	}
+
+	return filepath.Join(".", "data")
+}
+
+func defaultWebRoot() string {
+	const containerWebRoot = "/opt/graydeck/web"
+	if info, err := os.Stat(containerWebRoot); err == nil && info.IsDir() {
+		return containerWebRoot
+	}
+
+	return filepath.Join(".", "web", "dist")
 }

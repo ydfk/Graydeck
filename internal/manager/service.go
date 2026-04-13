@@ -19,13 +19,17 @@ import (
 )
 
 type Config struct {
-	DataDir          string
-	CoreTargetOS     string
-	CoreTargetArch   string
-	ControllerAddr   string
-	RuntimeMixedPort string
-	RuntimeSecret    string
-	BaseConfigPath   string
+	DataDir           string
+	CoreTargetOS      string
+	CoreTargetArch    string
+	ControllerAddr    string
+	RuntimeMixedPort  string
+	RuntimeSocksPort  string
+	RuntimeRedirPort  string
+	RuntimeTProxyPort string
+	RuntimeSecret     string
+	BaseConfigPath    string
+	WebRoot           string
 }
 
 type Service struct {
@@ -277,6 +281,27 @@ func (s *Service) PreviewSubscription(id string) (model.SubscriptionPreview, err
 	return model.SubscriptionPreview{
 		ID:      subscription.ID,
 		Name:    subscription.Name,
+		Content: string(content),
+	}, nil
+}
+
+func (s *Service) RuntimeConfigPreview() (model.RuntimeConfigPreview, error) {
+	content, err := os.ReadFile(s.currentConfigPath())
+	if err != nil {
+		return model.RuntimeConfigPreview{}, err
+	}
+
+	s.mu.RLock()
+	name := strings.TrimSpace(s.status.CurrentConfigName)
+	s.mu.RUnlock()
+
+	if name == "" {
+		name = filepath.Base(s.currentConfigPath())
+	}
+
+	return model.RuntimeConfigPreview{
+		Name:    name,
+		Path:    s.currentConfigPath(),
 		Content: string(content),
 	}, nil
 }
@@ -776,7 +801,7 @@ func (s *Service) syncInstallStateLocked() {
 		if s.status.ZashboardLatestVersion != "" {
 			s.status.ZashboardVersion = s.status.ZashboardLatestVersion
 		} else {
-			s.status.ZashboardVersion = "installed"
+			s.status.ZashboardVersion = "unknown"
 		}
 	}
 
@@ -790,6 +815,9 @@ func (s *Service) loadManagedRuntimeValues() managedRuntimeValues {
 	if err != nil {
 		return managedRuntimeValues{
 			mixedPort:  s.cfg.RuntimeMixedPort,
+			socksPort:  s.cfg.RuntimeSocksPort,
+			redirPort:  s.cfg.RuntimeRedirPort,
+			tproxyPort: s.cfg.RuntimeTProxyPort,
 			controller: s.cfg.ControllerAddr,
 			secret:     s.cfg.RuntimeSecret,
 		}
@@ -797,6 +825,9 @@ func (s *Service) loadManagedRuntimeValues() managedRuntimeValues {
 
 	return parseManagedRuntimeValues(string(content), managedRuntimeValues{
 		mixedPort:  s.cfg.RuntimeMixedPort,
+		socksPort:  s.cfg.RuntimeSocksPort,
+		redirPort:  s.cfg.RuntimeRedirPort,
+		tproxyPort: s.cfg.RuntimeTProxyPort,
 		controller: s.cfg.ControllerAddr,
 		secret:     s.cfg.RuntimeSecret,
 	})
@@ -808,6 +839,10 @@ func (s *Service) runtimeControllerAddr() string {
 
 func (s *Service) RuntimeSecret() string {
 	return s.loadManagedRuntimeValues().secret
+}
+
+func (s *Service) WebRoot() string {
+	return s.cfg.WebRoot
 }
 
 func appendLogEntry(current []model.LogEntry, message string) []model.LogEntry {

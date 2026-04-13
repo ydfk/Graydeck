@@ -32,6 +32,7 @@ func NewRouter(service *manager.Service) http.Handler {
 func (r *Router) registerRoutes() {
 	r.mux.HandleFunc("/api/healthz", r.handleHealth)
 	r.mux.HandleFunc("/api/system/status", r.handleSystemStatus)
+	r.mux.HandleFunc("/api/system/config/current", r.handleSystemCurrentConfig)
 	r.mux.HandleFunc("/api/system/refresh", r.handleSystemRefresh)
 	r.mux.HandleFunc("/api/system/start", r.handleSystemStart)
 	r.mux.HandleFunc("/api/system/restart", r.handleSystemRestart)
@@ -48,6 +49,7 @@ func (r *Router) registerRoutes() {
 	r.mux.Handle("/api/clash", r.buildClashProxy())
 	r.mux.Handle("/zashboard-ui/", r.buildZashboardHandler())
 	r.mux.Handle("/zashboard-ui", r.buildZashboardHandler())
+	r.mux.Handle("/", r.buildWebHandler())
 }
 
 func (r *Router) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -56,6 +58,25 @@ func (r *Router) handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 func (r *Router) handleSystemStatus(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, r.service.Status())
+}
+
+func (r *Router) handleSystemCurrentConfig(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	preview, err := r.service.RuntimeConfigPreview()
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.Error(w, "运行中配置不存在", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, preview)
 }
 
 func (r *Router) handleSystemRefresh(w http.ResponseWriter, req *http.Request) {
@@ -305,6 +326,47 @@ func (r *Router) buildClashProxy() http.Handler {
 		}
 
 		proxy.ServeHTTP(w, req)
+	})
+}
+
+func (r *Router) buildWebHandler() http.Handler {
+	webRoot := strings.TrimSpace(r.service.WebRoot())
+	if webRoot == "" {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "web ui not configured", http.StatusNotFound)
+		})
+	}
+
+	fileServer := http.FileServer(http.Dir(webRoot))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasPrefix(req.URL.Path, "/api/") || strings.HasPrefix(req.URL.Path, "/zashboard-ui") {
+			http.NotFound(w, req)
+			return
+		}
+
+		trimmedPath := strings.TrimPrefix(req.URL.Path, "/")
+		if trimmedPath == "" {
+			trimmedPath = "index.html"
+		}
+
+		if info, statErr := os.Stat(filepath.Join(webRoot, filepath.Clean(trimmedPath))); statErr == nil && !info.IsDir() {
+			fileServer.ServeHTTP(w, req)
+			return
+		}
+
+		if strings.Contains(filepath.Base(trimmedPath), ".") {
+			http.NotFound(w, req)
+			return
+		}
+
+		indexPath := filepath.Join(webRoot, "index.html")
+		if _, statErr := os.Stat(indexPath); statErr != nil {
+			http.Error(w, "web ui not ready", http.StatusServiceUnavailable)
+			return
+		}
+
+		http.ServeFile(w, req, indexPath)
 	})
 }
 

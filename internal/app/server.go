@@ -14,13 +14,17 @@ type Server struct {
 
 func NewServer(cfg Config) (*Server, error) {
 	service, err := manager.New(manager.Config{
-		DataDir:          cfg.DataDir,
-		CoreTargetOS:     cfg.CoreTargetOS,
-		CoreTargetArch:   cfg.CoreTargetArch,
-		ControllerAddr:   cfg.ControllerAddr,
-		RuntimeMixedPort: cfg.RuntimeMixedPort,
-		RuntimeSecret:    cfg.RuntimeSecret,
-		BaseConfigPath:   cfg.BaseConfigPath,
+		DataDir:           cfg.DataDir,
+		CoreTargetOS:      cfg.CoreTargetOS,
+		CoreTargetArch:    cfg.CoreTargetArch,
+		ControllerAddr:    cfg.ControllerAddr,
+		RuntimeMixedPort:  cfg.RuntimeMixedPort,
+		RuntimeSocksPort:  cfg.RuntimeSocksPort,
+		RuntimeRedirPort:  cfg.RuntimeRedirPort,
+		RuntimeTProxyPort: cfg.RuntimeTProxyPort,
+		RuntimeSecret:     cfg.RuntimeSecret,
+		BaseConfigPath:    cfg.BaseConfigPath,
+		WebRoot:           cfg.WebRoot,
 	})
 	if err != nil {
 		return nil, err
