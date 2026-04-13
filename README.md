@@ -1,13 +1,13 @@
 # Graydeck
 
-`Graydeck` 是一个面向 `mihomo` 的管理端项目，当前包含：
+`Graydeck` 是一个面向 `mihomo` 的轻量管理端，当前已经具备一条真实可运行的基础链路：
 
-- Go 编写的 `managerd` 后端
-- React + TypeScript + Vite 前端
-- 简体中文 / English i18n
-- 以远程订阅为主的配置管理界面
-- `zashboard` safe 模式接入外壳
-- `pnpm workspace` 根脚本
+- 首次启动时自动检查并下载最新 `mihomo` 核心
+- 首次启动时自动检查并下载最新 `zashboard` 静态资源
+- 远程订阅配置拉取、状态记录、格式校验、YAML 在线预览
+- 当前启用配置切换与运行状态反馈
+- 核心与 `zashboard` 版本检查、手动升级
+- React + TypeScript + Vite 8 前端
 - Go `air` 热更新开发流程
 
 ## 环境要求
@@ -33,39 +33,43 @@ npm install -g pnpm
 
 ```text
 .
-├─ cmd/managerd         # 后端入口
-├─ internal/            # 后端内部实现
-├─ web/                 # 前端
+├─ cmd/managerd
+├─ internal/
+├─ web/
+├─ data/                 # 运行时数据目录，首次启动后自动生成
 ├─ DOCKER_IMAGE_DESIGN.md
 └─ web/DESIGN.md
 ```
 
-## 启动后端
+`data/` 下会生成这些内容：
 
-项目根目录执行：
+- `data/core/`：`mihomo` 核心与版本记录
+- `data/zashboard/`：`zashboard` 静态资源与版本记录
+- `data/subscriptions.json`：配置文件元数据
+- `data/subscriptions/*.yaml`：订阅拉取后的 YAML 预览文件
+- `data/runtime/current.yaml`：当前生效配置
+
+## 启动
+
+首次安装依赖：
+
+```powershell
+pnpm install
+```
+
+启动前后端：
+
+```powershell
+pnpm run dev
+```
+
+只启动后端：
 
 ```powershell
 pnpm run dev:server
 ```
 
-根脚本会自动把 `GOCACHE` 指向仓库内的 `.gocache/`。
-
-默认监听地址：
-
-```text
-http://localhost:18080
-```
-
-可用环境变量：
-
-```powershell
-$env:MGR_LISTEN=":18080"
-$env:ZASHBOARD_MODE="safe"
-```
-
-## 启动前端
-
-项目根目录执行：
+只启动前端：
 
 ```powershell
 pnpm run dev:web
@@ -73,34 +77,45 @@ pnpm run dev:web
 
 默认地址：
 
-```text
-http://localhost:5173
-```
+- 前端：`http://localhost:5173`
+- 后端：`http://localhost:18080`
 
-前端开发服务器会把 `/api/*` 代理到后端 `http://localhost:18080`。
-
-## 同时启动前后端
-
-项目根目录执行：
+## 可用环境变量
 
 ```powershell
-pnpm run dev
+$env:MGR_LISTEN=":18080"
+$env:GRAYDECK_DATA_DIR=".\data"
+$env:GRAYDECK_CORE_OS="linux"
+$env:GRAYDECK_CORE_ARCH="amd64"
 ```
 
-这条命令会同时启动：
+说明：
 
-- `pnpm run dev:web`
-- `pnpm run dev:server`
+- `GRAYDECK_DATA_DIR` 用来指定运行时数据目录
+- `GRAYDECK_CORE_OS` / `GRAYDECK_CORE_ARCH` 用来指定自动下载的核心目标平台
+- 在 Docker 镜像里通常会使用 `linux` / `amd64` 或 `linux` / `arm64`
 
-## 首次安装说明
+## 当前行为
 
-首次拉项目建议先在根目录执行：
+### 核心
 
-```powershell
-pnpm install
-```
+- 如果本地没有 `mihomo` 核心，后端启动时会自动拉取最新正式版
+- 当前核心版本和最新版本会显示在控制台
+- 如果检测到新版本，可以在界面里手动升级
 
-当前仓库里如果已经存在旧的 `node_modules` 或旧锁文件，实际运行的 `vite` 版本可能不是 `package.json` 里声明的版本。为了确保前端真正使用 `pnpm + Vite 8`，建议删除旧依赖后重新安装。
+### 配置文件
+
+- 当前以远程订阅为主
+- 每个配置文件都会记录同步状态
+- 常见状态包括：`可用`、`订阅失败`、`格式校验失败`
+- 如果没有可用配置，或者当前配置校验失败，核心不会启动，运行状态里会显示原因
+- 支持 YAML 在线预览
+
+### Zashboard
+
+- 如果本地没有 `zashboard` 资源，后端启动时会自动拉取最新版本
+- `Zashboard` 页面会显示当前版本、最新版本和升级入口
+- 页面路由使用 `/zashboard-ui/`
 
 ## 常用命令
 
@@ -133,11 +148,3 @@ pnpm run check
 ```powershell
 pnpm run build
 ```
-
-## 当前开发重点
-
-- 多订阅源管理
-- 当前启用订阅自动校验与应用
-- 配置草稿与历史版本
-- `zashboard` safe 模式控制层
-- `mihomo` 核心更新

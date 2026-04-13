@@ -1,11 +1,20 @@
 export type SystemStatus = {
-  coreStatus: string
+  runtimeStatus: string
+  runtimeError: string
+  currentConfigName: string
+  baseConfigPath: string
+  runtimeMixedPort: string
+  runtimeControllerAddr: string
+  runtimeSecret: string
   coreVersion: string
-  configSource: string
-  lastAppliedAt: string
-  lastUpdateResult: string
-  lastValidationResult: string
-  zashboardMode: string
+  coreLatestVersion: string
+  coreIsLatest: boolean
+  coreExecutableReady: boolean
+  zashboardVersion: string
+  zashboardLatestVersion: string
+  zashboardIsLatest: boolean
+  zashboardReady: boolean
+  zashboardError: string
 }
 
 export type Subscription = {
@@ -15,21 +24,28 @@ export type Subscription = {
   enabled: boolean
   autoSync: boolean
   syncInterval: string
-  applyPolicy: string
   lastSyncAt: string
   lastSuccess: string
   lastFailureReason: string
-  candidateVersion: string
+  status: string
+  previewAvailable: boolean
 }
 
 export type SubscriptionListResponse = {
   items: Subscription[]
 }
 
-export type ZashboardMode = {
-  mode: string
-  allowedFeatures: string[]
-  blockedFeatures: string[]
-  urlFlags: string[]
-  allowedWriteScopes: string[]
+export type SubscriptionPreview = {
+  id: string
+  name: string
+  content: string
+}
+
+export type LogEntry = {
+  at: string
+  message: string
+}
+
+export type LogListResponse = {
+  items: LogEntry[]
 }

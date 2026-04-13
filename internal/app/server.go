@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"mihomo-manager/internal/httpapi"
-	"mihomo-manager/internal/store"
+	"mihomo-manager/internal/manager"
 )
 
 type Server struct {
@@ -13,8 +13,20 @@ type Server struct {
 }
 
 func NewServer(cfg Config) (*Server, error) {
-	memStore := store.NewMemoryStore(cfg.ZashboardMode)
-	handler := httpapi.NewRouter(memStore)
+	service, err := manager.New(manager.Config{
+		DataDir:          cfg.DataDir,
+		CoreTargetOS:     cfg.CoreTargetOS,
+		CoreTargetArch:   cfg.CoreTargetArch,
+		ControllerAddr:   cfg.ControllerAddr,
+		RuntimeMixedPort: cfg.RuntimeMixedPort,
+		RuntimeSecret:    cfg.RuntimeSecret,
+		BaseConfigPath:   cfg.BaseConfigPath,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	handler := httpapi.NewRouter(service)
 
 	return &Server{
 		httpServer: &http.Server{

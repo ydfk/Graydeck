@@ -51,6 +51,10 @@ export default defineConfig({
         target: 'http://localhost:18080',
         changeOrigin: true,
       },
+      '/zashboard-ui': {
+        target: 'http://localhost:18080',
+        changeOrigin: true,
+      },
     },
   },
   build: {

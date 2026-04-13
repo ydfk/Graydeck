@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet } from './client'
-import type { SubscriptionListResponse, SystemStatus, ZashboardMode } from '@/types/api'
+import type { LogListResponse, SubscriptionListResponse, SystemStatus } from '@/types/api'
 
 export function useSystemStatus() {
   return useQuery({
@@ -16,9 +16,10 @@ export function useSubscriptions() {
   })
 }
 
-export function useZashboardMode() {
+export function useLogs() {
   return useQuery({
-    queryKey: ['zashboard-mode'],
-    queryFn: () => apiGet<ZashboardMode>('/api/zashboard/mode'),
+    queryKey: ['logs'],
+    queryFn: () => apiGet<LogListResponse>('/api/logs'),
+    refetchInterval: 2000,
   })
 }
