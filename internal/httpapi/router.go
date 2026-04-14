@@ -9,20 +9,23 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"mihomo-manager/internal/manager"
 	"mihomo-manager/internal/model"
 )
 
 type Router struct {
-	service *manager.Service
-	mux     *http.ServeMux
+	service  *manager.Service
+	mux      *http.ServeMux
+	sessions *sessionStore
 }
 
 func NewRouter(service *manager.Service) http.Handler {
 	router := &Router{
-		service: service,
-		mux:     http.NewServeMux(),
+		service:  service,
+		mux:      http.NewServeMux(),
+		sessions: newSessionStore(7 * 24 * time.Hour),
 	}
 
 	router.registerRoutes()
@@ -31,21 +34,27 @@ func NewRouter(service *manager.Service) http.Handler {
 
 func (r *Router) registerRoutes() {
 	r.mux.HandleFunc("/api/healthz", r.handleHealth)
-	r.mux.HandleFunc("/api/system/status", r.handleSystemStatus)
-	r.mux.HandleFunc("/api/system/config/current", r.handleSystemCurrentConfig)
-	r.mux.HandleFunc("/api/system/config/default", r.handleSystemDefaultConfig)
-	r.mux.HandleFunc("/api/system/refresh", r.handleSystemRefresh)
-	r.mux.HandleFunc("/api/system/start", r.handleSystemStart)
-	r.mux.HandleFunc("/api/system/restart", r.handleSystemRestart)
-	r.mux.HandleFunc("/api/system/stop", r.handleSystemStop)
-	r.mux.HandleFunc("/api/system/core/update", r.handleSystemCoreUpdate)
-	r.mux.HandleFunc("/api/zashboard/update", r.handleZashboardUpdate)
-	r.mux.HandleFunc("/api/subscriptions", r.handleSubscriptions)
-	r.mux.HandleFunc("/api/subscriptions/create", r.handleSubscriptionCreate)
-	r.mux.HandleFunc("/api/subscriptions/update", r.handleSubscriptionUpdate)
-	r.mux.HandleFunc("/api/subscriptions/activate", r.handleSubscriptionActivate)
-	r.mux.HandleFunc("/api/subscriptions/preview", r.handleSubscriptionPreview)
-	r.mux.HandleFunc("/api/logs", r.handleLogs)
+	r.mux.HandleFunc("/api/auth/status", r.handleAuthStatus)
+	r.mux.HandleFunc("/api/auth/login", r.handleAuthLogin)
+	r.mux.HandleFunc("/api/auth/logout", r.handleAuthLogout)
+	r.mux.HandleFunc("/api/system/status", r.requireAuthAPI(r.handleSystemStatus))
+	r.mux.HandleFunc("/api/system/config/current", r.requireAuthAPI(r.handleSystemCurrentConfig))
+	r.mux.HandleFunc("/api/system/config/default", r.requireAuthAPI(r.handleSystemDefaultConfig))
+	r.mux.HandleFunc("/api/system/refresh", r.requireAuthAPI(r.handleSystemRefresh))
+	r.mux.HandleFunc("/api/system/start", r.requireAuthAPI(r.handleSystemStart))
+	r.mux.HandleFunc("/api/system/restart", r.requireAuthAPI(r.handleSystemRestart))
+	r.mux.HandleFunc("/api/system/stop", r.requireAuthAPI(r.handleSystemStop))
+	r.mux.HandleFunc("/api/system/core/update", r.requireAuthAPI(r.handleSystemCoreUpdate))
+	r.mux.HandleFunc("/api/system/core/upload", r.requireAuthAPI(r.handleSystemCoreUpload))
+	r.mux.HandleFunc("/api/zashboard/update", r.requireAuthAPI(r.handleZashboardUpdate))
+	r.mux.HandleFunc("/api/zashboard/upload", r.requireAuthAPI(r.handleZashboardUpload))
+	r.mux.HandleFunc("/api/subscriptions", r.requireAuthAPI(r.handleSubscriptions))
+	r.mux.HandleFunc("/api/subscriptions/create", r.requireAuthAPI(r.handleSubscriptionCreate))
+	r.mux.HandleFunc("/api/subscriptions/update", r.requireAuthAPI(r.handleSubscriptionUpdate))
+	r.mux.HandleFunc("/api/subscriptions/sync", r.requireAuthAPI(r.handleSubscriptionSync))
+	r.mux.HandleFunc("/api/subscriptions/activate", r.requireAuthAPI(r.handleSubscriptionActivate))
+	r.mux.HandleFunc("/api/subscriptions/preview", r.requireAuthAPI(r.handleSubscriptionPreview))
+	r.mux.HandleFunc("/api/logs", r.requireAuthAPI(r.handleLogs))
 	r.mux.Handle("/api/clash/", r.buildClashProxy())
 	r.mux.Handle("/api/clash", r.buildClashProxy())
 	r.mux.Handle("/zashboard-ui/", r.buildZashboardHandler())
@@ -156,36 +165,6 @@ func (r *Router) handleSystemStop(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, http.StatusOK, r.service.StopRuntime())
 }
 
-func (r *Router) handleSystemCoreUpdate(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
-	status, err := r.service.UpdateCore(req.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, status)
-}
-
-func (r *Router) handleZashboardUpdate(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
-	status, err := r.service.UpdateZashboard(req.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, status)
-}
-
 func (r *Router) handleSubscriptions(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string][]model.Subscription{
 		"items": r.service.Subscriptions(),
@@ -245,6 +224,30 @@ func (r *Router) handleSubscriptionUpdate(w http.ResponseWriter, req *http.Reque
 	writeJSON(w, http.StatusOK, item)
 }
 
+func (r *Router) handleSubscriptionSync(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload struct {
+		ID string `json:"id"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	item, err := r.service.SyncSubscription(req.Context(), payload.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, item)
+}
+
 func (r *Router) handleSubscriptionActivate(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -293,6 +296,11 @@ func (r *Router) handleLogs(w http.ResponseWriter, _ *http.Request) {
 
 func (r *Router) buildZashboardHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if !r.isAuthenticated(req) {
+			http.Error(w, "未登录", http.StatusUnauthorized)
+			return
+		}
+
 		if req.URL.Path == "/zashboard-ui" {
 			http.Redirect(w, req, "/zashboard-ui/", http.StatusTemporaryRedirect)
 			return
@@ -344,6 +352,11 @@ func (r *Router) buildClashProxy() http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if !r.isAuthenticated(req) {
+			http.Error(w, "未登录", http.StatusUnauthorized)
+			return
+		}
+
 		if req.URL.Path == "/api/clash" {
 			http.Redirect(w, req, "/api/clash/", http.StatusTemporaryRedirect)
 			return
@@ -374,6 +387,26 @@ func (r *Router) buildWebHandler() http.Handler {
 			trimmedPath = "index.html"
 		}
 
+		if !r.isAuthenticated(req) {
+			if r.shouldServePublicAsset(webRoot, trimmedPath) {
+				fileServer.ServeHTTP(w, req)
+				return
+			}
+
+			if req.URL.Path == "/login" || req.URL.Path == "/login/" {
+				r.serveWebIndex(w, req, webRoot)
+				return
+			}
+
+			http.Redirect(w, req, "/login", http.StatusTemporaryRedirect)
+			return
+		}
+
+		if req.URL.Path == "/login" || req.URL.Path == "/login/" {
+			http.Redirect(w, req, "/", http.StatusTemporaryRedirect)
+			return
+		}
+
 		if info, statErr := os.Stat(filepath.Join(webRoot, filepath.Clean(trimmedPath))); statErr == nil && !info.IsDir() {
 			fileServer.ServeHTTP(w, req)
 			return
@@ -384,13 +417,7 @@ func (r *Router) buildWebHandler() http.Handler {
 			return
 		}
 
-		indexPath := filepath.Join(webRoot, "index.html")
-		if _, statErr := os.Stat(indexPath); statErr != nil {
-			http.Error(w, "web ui not ready", http.StatusServiceUnavailable)
-			return
-		}
-
-		http.ServeFile(w, req, indexPath)
+		r.serveWebIndex(w, req, webRoot)
 	})
 }
 
@@ -402,7 +429,13 @@ func writeJSON(w http.ResponseWriter, statusCode int, payload any) {
 
 func (r *Router) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if origin := req.Header.Get("Origin"); origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Vary", "Origin")
+		} else {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
@@ -413,4 +446,27 @@ func (r *Router) withCORS(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, req)
 	})
+}
+
+func (r *Router) shouldServePublicAsset(webRoot, trimmedPath string) bool {
+	if trimmedPath == "" || trimmedPath == "index.html" {
+		return false
+	}
+
+	info, err := os.Stat(filepath.Join(webRoot, filepath.Clean(trimmedPath)))
+	if err != nil || info.IsDir() {
+		return false
+	}
+
+	return strings.Contains(filepath.Base(trimmedPath), ".")
+}
+
+func (r *Router) serveWebIndex(w http.ResponseWriter, req *http.Request, webRoot string) {
+	indexPath := filepath.Join(webRoot, "index.html")
+	if _, statErr := os.Stat(indexPath); statErr != nil {
+		http.Error(w, "web ui not ready", http.StatusServiceUnavailable)
+		return
+	}
+
+	http.ServeFile(w, req, indexPath)
 }

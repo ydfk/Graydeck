@@ -1,3 +1,10 @@
 # Graydeck 服务配置
+auth:
+  enabled: true
+  username: admin
+  password: admin123
+update:
+  prefer-proxy: true
+  proxy-url: https://ghfast.top/
 zashboard:
   hide-settings: true

@@ -18,6 +18,12 @@ export type SystemStatus = {
   zashboardHideSettings: boolean;
 };
 
+export type AuthStatus = {
+  enabled: boolean;
+  authenticated: boolean;
+  username?: string;
+};
+
 export type Subscription = {
   id: string;
   name: string;

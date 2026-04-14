@@ -1,6 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet } from './client'
-import type { LogListResponse, SubscriptionListResponse, SystemStatus } from '@/types/api'
+import type { AuthStatus, LogListResponse, SubscriptionListResponse, SystemStatus } from '@/types/api'
+
+export function useAuthStatus() {
+  return useQuery({
+    queryKey: ['auth-status'],
+    queryFn: () => apiGet<AuthStatus>('/api/auth/status'),
+  })
+}
 
 export function useSystemStatus() {
   return useQuery({

@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func copyFile(sourcePath, targetPath string) error {
@@ -45,6 +46,21 @@ func clearDirExcept(dir string, keepName string) error {
 	return nil
 }
 
+func clearDir(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
@@ -53,4 +69,13 @@ func fileExists(path string) bool {
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
+}
+
+func safeBaseName(value string, fallback string) string {
+	name := strings.TrimSpace(filepath.Base(value))
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		return fallback
+	}
+
+	return name
 }

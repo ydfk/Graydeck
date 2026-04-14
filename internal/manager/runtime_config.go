@@ -14,6 +14,10 @@ type managedRuntimeValues struct {
 	socksPort  string
 	redirPort  string
 	tproxyPort string
+	bindAddr   string
+	allowLAN   string
+	mode       string
+	logLevel   string
 	controller string
 	secret     string
 }
@@ -67,12 +71,13 @@ mixed-port: %s
 socks-port: %s
 redir-port: %s
 tproxy-port: %s
+bind-address: %s
+allow-lan: %s
 external-controller: %s
 secret: %s
-allow-lan: false
-mode: rule
-log-level: info
-`, yamlScalar(s.cfg.RuntimeMixedPort), yamlScalar(s.cfg.RuntimeSocksPort), yamlScalar(s.cfg.RuntimeRedirPort), yamlScalar(s.cfg.RuntimeTProxyPort), yamlString(s.cfg.ControllerAddr), yamlString(s.cfg.RuntimeSecret))) + "\n"
+mode: %s
+log-level: %s
+`, yamlScalar(s.cfg.RuntimeMixedPort), yamlScalar(s.cfg.RuntimeSocksPort), yamlScalar(s.cfg.RuntimeRedirPort), yamlScalar(s.cfg.RuntimeTProxyPort), yamlString("0.0.0.0"), yamlBool("true"), yamlString(s.cfg.ControllerAddr), yamlString(s.cfg.RuntimeSecret), yamlString("rule"), yamlString("info"))) + "\n"
 }
 
 func (s *Service) writeRuntimeConfig(sourcePath, targetPath string) error {
@@ -92,9 +97,10 @@ func (s *Service) writeRuntimeConfig(sourcePath, targetPath string) error {
 		"socks-port",
 		"redir-port",
 		"tproxy-port",
+		"bind-address",
+		"allow-lan",
 		"external-controller",
 		"secret",
-		"allow-lan",
 		"mode",
 		"log-level",
 	}
@@ -104,6 +110,10 @@ func (s *Service) writeRuntimeConfig(sourcePath, targetPath string) error {
 		socksPort:  s.cfg.RuntimeSocksPort,
 		redirPort:  s.cfg.RuntimeRedirPort,
 		tproxyPort: s.cfg.RuntimeTProxyPort,
+		bindAddr:   "0.0.0.0",
+		allowLAN:   "true",
+		mode:       "rule",
+		logLevel:   "info",
 		controller: s.cfg.ControllerAddr,
 		secret:     s.cfg.RuntimeSecret,
 	})
@@ -113,9 +123,13 @@ mixed-port: %s
 socks-port: %s
 redir-port: %s
 tproxy-port: %s
+bind-address: %s
+allow-lan: %s
 external-controller: %s
 secret: %s
-`, yamlScalar(values.mixedPort), yamlScalar(values.socksPort), yamlScalar(values.redirPort), yamlScalar(values.tproxyPort), yamlString(values.controller), yamlString(values.secret)))
+mode: %s
+log-level: %s
+`, yamlScalar(values.mixedPort), yamlScalar(values.socksPort), yamlScalar(values.redirPort), yamlScalar(values.tproxyPort), yamlString(values.bindAddr), yamlBool(values.allowLAN), yamlString(values.controller), yamlString(values.secret), yamlString(values.mode), yamlString(values.logLevel)))
 
 	baseExtraSection := strings.TrimSpace(stripTopLevelKeys(string(baseConfig), managedKeys...))
 	subscriptionSection := strings.TrimSpace(stripTopLevelKeys(string(content), managedKeys...))
@@ -186,6 +200,10 @@ func (s *Service) UpdateDefaultRuntimeConfig(values model.DefaultRuntimeConfig) 
 	}
 
 	current := s.loadManagedRuntimeValues()
+	updated.bindAddr = current.bindAddr
+	updated.allowLAN = current.allowLAN
+	updated.mode = current.mode
+	updated.logLevel = current.logLevel
 	updated.controller = current.controller
 	updated.secret = current.secret
 
@@ -242,6 +260,17 @@ func yamlScalar(value string) string {
 	return yamlString(trimmed)
 }
 
+func yamlBool(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true":
+		return "true"
+	case "false":
+		return "false"
+	default:
+		return "false"
+	}
+}
+
 func isDigitsOnly(value string) bool {
 	for _, char := range value {
 		if char < '0' || char > '9' {
@@ -289,10 +318,18 @@ func parseManagedRuntimeValues(content string, fallback managedRuntimeValues) ma
 			values.redirPort = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "redir-port:")))
 		case strings.HasPrefix(trimmed, "tproxy-port:"):
 			values.tproxyPort = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "tproxy-port:")))
+		case strings.HasPrefix(trimmed, "bind-address:"):
+			values.bindAddr = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "bind-address:")))
+		case strings.HasPrefix(trimmed, "allow-lan:"):
+			values.allowLAN = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "allow-lan:")))
 		case strings.HasPrefix(trimmed, "external-controller:"):
 			values.controller = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "external-controller:")))
 		case strings.HasPrefix(trimmed, "secret:"):
 			values.secret = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "secret:")))
+		case strings.HasPrefix(trimmed, "mode:"):
+			values.mode = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "mode:")))
+		case strings.HasPrefix(trimmed, "log-level:"):
+			values.logLevel = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "log-level:")))
 		}
 	}
 
@@ -310,8 +347,12 @@ func (s *Service) saveManagedRuntimeValues(values managedRuntimeValues) error {
 		"socks-port",
 		"redir-port",
 		"tproxy-port",
+		"bind-address",
+		"allow-lan",
 		"external-controller",
 		"secret",
+		"mode",
+		"log-level",
 	}
 
 	managedSection := strings.TrimSpace(fmt.Sprintf(`
@@ -319,9 +360,13 @@ mixed-port: %s
 socks-port: %s
 redir-port: %s
 tproxy-port: %s
+bind-address: %s
+allow-lan: %s
 external-controller: %s
 secret: %s
-`, yamlScalar(values.mixedPort), yamlScalar(values.socksPort), yamlScalar(values.redirPort), yamlScalar(values.tproxyPort), yamlString(values.controller), yamlString(values.secret)))
+mode: %s
+log-level: %s
+`, yamlScalar(values.mixedPort), yamlScalar(values.socksPort), yamlScalar(values.redirPort), yamlScalar(values.tproxyPort), yamlString(values.bindAddr), yamlBool(values.allowLAN), yamlString(values.controller), yamlString(values.secret), yamlString(values.mode), yamlString(values.logLevel)))
 
 	extraSection := strings.TrimSpace(stripTopLevelKeys(string(currentContent), managedKeys...))
 	sections := []string{managedSection}

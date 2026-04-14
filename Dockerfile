@@ -34,12 +34,12 @@ COPY config /config
 ENV GRAYDECK_SECRET=graydeck-secret
 
 EXPOSE 18080
-EXPOSE 7890/tcp
-EXPOSE 7890/udp
-EXPOSE 7891/tcp
-EXPOSE 7892/tcp
-EXPOSE 7893/tcp
-EXPOSE 7893/udp
+EXPOSE 17890/tcp
+EXPOSE 17890/udp
+EXPOSE 17891/tcp
+EXPOSE 17892/tcp
+EXPOSE 17893/tcp
+EXPOSE 17893/udp
 VOLUME ["/data", "/config"]
 
 ENTRYPOINT ["/usr/local/bin/managerd"]

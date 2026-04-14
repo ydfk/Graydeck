@@ -89,6 +89,7 @@ a:focus-visible {
 .topbar-actions {
   display: flex;
   align-items: center;
+  gap: 12px;
 }
 
 .app-title,
@@ -158,6 +159,20 @@ a:focus-visible {
 
 .workspace-content {
   padding-top: 4px;
+}
+
+.auth-loading,
+.login-main {
+  width: min(1800px, calc(100vw - 24px));
+  margin: 0 auto;
+}
+
+.auth-loading {
+  display: flex;
+  min-height: calc(100vh - 120px);
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
 }
 
 .mono-label,
@@ -265,6 +280,12 @@ a:focus-visible {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.auth-user {
+  color: var(--color-text-secondary);
+  font-size: 0.88rem;
+  font-weight: 500;
 }
 
 .table-stack {
@@ -422,6 +443,17 @@ a:focus-visible {
   padding: 6px 12px;
 }
 
+.update-source-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.active-source {
+  background: var(--color-black);
+  color: var(--color-white);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -568,6 +600,53 @@ a:focus-visible {
   box-shadow: var(--shadow-card);
 }
 
+.login-shell {
+  min-height: 100vh;
+  background: #fcfcfc;
+}
+
+.login-main {
+  display: flex;
+  min-height: calc(100vh - 120px);
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 28px;
+}
+
+.login-card {
+  width: min(420px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  border-radius: var(--radius-image);
+  background: var(--color-white);
+  box-shadow: var(--shadow-card);
+}
+
+.login-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.login-submit {
+  width: 100%;
+  justify-content: center;
+}
+
 .fullscreen-backdrop {
   position: fixed;
   inset: 0;
@@ -651,6 +730,12 @@ a:focus-visible {
   .topbar {
     flex-direction: column;
     padding: 20px 0 12px;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
   }
 
   .nav-row {

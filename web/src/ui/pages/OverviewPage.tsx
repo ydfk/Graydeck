@@ -1,9 +1,10 @@
 import { Fragment, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost } from "@/api/client";
+import { apiGet, apiPost, apiUpload } from "@/api/client";
 import { useSubscriptions, useSystemStatus } from "@/api/queries";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { RuntimeConfigPreview, SubscriptionPreview, SystemStatus } from "@/types/api";
+import { ArtifactUpdateDialog } from "@/ui/components/ArtifactUpdateDialog";
 import { Panel } from "@/ui/components/Panel";
 import { SubscriptionTable } from "@/ui/components/SubscriptionTable";
 
@@ -18,8 +19,11 @@ export function OverviewPage() {
   const queryClient = useQueryClient();
   const statusQuery = useSystemStatus();
   const subscriptionsQuery = useSubscriptions();
+  const systemStatus = statusQuery.data;
+  const subscriptions = subscriptionsQuery.data?.items ?? [];
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [showRuntimeConfig, setShowRuntimeConfig] = useState(false);
+  const [showCoreUpdateDialog, setShowCoreUpdateDialog] = useState(false);
   const [actionError, setActionError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
 
@@ -30,7 +34,7 @@ export function OverviewPage() {
   });
 
   const runtimeConfigQuery = useQuery({
-    enabled: showRuntimeConfig,
+    enabled: showRuntimeConfig && Boolean(systemStatus?.currentConfigName),
     queryKey: ["runtime-config-preview"],
     queryFn: () => apiGet<RuntimeConfigPreview>("/api/system/config/current"),
   });
@@ -79,9 +83,21 @@ export function OverviewPage() {
   });
 
   const updateCoreMutation = useMutation({
-    mutationFn: () => apiPost<SystemStatus>("/api/system/core/update"),
+    mutationFn: (payload?: { source: "auto" | "url"; url?: string }) => apiPost<SystemStatus>("/api/system/core/update", payload),
     onSuccess: async () => {
       setActionError("");
+      setShowCoreUpdateDialog(false);
+      await queryClient.invalidateQueries({ queryKey: ["system-status"] });
+      await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : t("status.error")),
+  });
+
+  const uploadCoreMutation = useMutation({
+    mutationFn: (file: File) => apiUpload<SystemStatus>("/api/system/core/upload", file),
+    onSuccess: async () => {
+      setActionError("");
+      setShowCoreUpdateDialog(false);
       await queryClient.invalidateQueries({ queryKey: ["system-status"] });
       await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
     },
@@ -112,6 +128,20 @@ export function OverviewPage() {
     onError: (error) => setActionError(error instanceof Error ? error.message : t("status.error")),
   });
 
+  const syncSubscriptionMutation = useMutation({
+    mutationFn: (id: string) => apiPost("/api/subscriptions/sync", { id }),
+    onSuccess: async (_data, id) => {
+      setActionError("");
+      await queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+      await queryClient.invalidateQueries({ queryKey: ["system-status"] });
+      await queryClient.invalidateQueries({ queryKey: ["logs"] });
+      if (previewId === id) {
+        await queryClient.invalidateQueries({ queryKey: ["subscription-preview", previewId] });
+      }
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : t("status.error")),
+  });
+
   const activateSubscriptionMutation = useMutation({
     mutationFn: (id: string) => apiPost("/api/subscriptions/activate", { id }),
     onSuccess: async (_data, id) => {
@@ -124,8 +154,6 @@ export function OverviewPage() {
     onError: (error) => setActionError(error instanceof Error ? error.message : t("status.error")),
   });
 
-  const systemStatus = statusQuery.data;
-  const subscriptions = subscriptionsQuery.data?.items ?? [];
   const runtimeActionPending =
     startRuntimeMutation.isPending || restartRuntimeMutation.isPending || stopRuntimeMutation.isPending;
 
@@ -153,6 +181,9 @@ export function OverviewPage() {
 
     return systemStatus.coreIsLatest ? t("core.isLatest") : t("core.hasUpdate");
   }, [systemStatus, t]);
+
+  const coreActionLabel = systemStatus?.coreExecutableReady ? t("core.updateNow") : `${t("common.install")}${t("update.coreTitle")}`;
+  const showCoreActionButton = !systemStatus?.coreExecutableReady || !systemStatus.coreIsLatest;
 
   function formatVersion(value: string, fallback: string) {
     if (!value) {
@@ -272,7 +303,12 @@ export function OverviewPage() {
                   <td>
                     <div className="table-actions">
                       <span className="summary-value-inline">{systemStatus.currentConfigName || t("common.empty")}</span>
-                      <button className="secondary-pill table-action-button" onClick={() => setShowRuntimeConfig(true)} type="button">
+                      <button
+                        className="secondary-pill table-action-button"
+                        disabled={!systemStatus.currentConfigName}
+                        onClick={() => setShowRuntimeConfig(true)}
+                        type="button"
+                      >
                         {t("system.viewRuntimeConfig")}
                       </button>
                     </div>
@@ -301,14 +337,14 @@ export function OverviewPage() {
                       <span className="summary-value-inline">{formatVersion(systemStatus.coreLatestVersion, t("core.unknown"))}</span>
                       <span className="summary-label">{t("core.versionStatus")}</span>
                       <span className={getCoreVersionBadgeClass()}>{versionStatusLabel}</span>
-                      {systemStatus.coreExecutableReady && !systemStatus.coreIsLatest ? (
+                      {showCoreActionButton ? (
                         <button
                           className="primary-pill table-action-button"
-                          disabled={updateCoreMutation.isPending}
-                          onClick={() => updateCoreMutation.mutate()}
+                          disabled={updateCoreMutation.isPending || uploadCoreMutation.isPending}
+                          onClick={() => setShowCoreUpdateDialog(true)}
                           type="button"
                         >
-                          {updateCoreMutation.isPending ? t("common.loading") : t("core.updateNow")}
+                          {updateCoreMutation.isPending || uploadCoreMutation.isPending ? t("common.loading") : coreActionLabel}
                         </button>
                       ) : null}
                     </div>
@@ -338,11 +374,13 @@ export function OverviewPage() {
           onCreate={(payload) => createSubscriptionMutation.mutate(payload)}
           onHideCreateForm={() => setShowCreateForm(false)}
           onPreview={(id) => setPreviewId(id)}
+          onSync={(id) => syncSubscriptionMutation.mutate(id)}
           onUpdate={(id, payload) => updateSubscriptionMutation.mutate({ id, ...payload })}
           previewingId={previewQuery.isFetching ? previewId : null}
           savingId={updateSubscriptionMutation.isPending ? updateSubscriptionMutation.variables?.id ?? null : null}
           showCreateForm={showCreateForm}
           subscriptions={subscriptions}
+          syncingId={syncSubscriptionMutation.isPending ? syncSubscriptionMutation.variables ?? null : null}
           switchingId={activateSubscriptionMutation.isPending ? activateSubscriptionMutation.variables ?? null : null}
         />
       </Panel>
@@ -387,6 +425,18 @@ export function OverviewPage() {
           </div>
         </div>
       ) : null}
+
+      <ArtifactUpdateDialog
+        errorMessage={actionError}
+        fileAccept=".gz,.zip,.exe"
+        onClose={() => setShowCoreUpdateDialog(false)}
+        onSubmitAuto={() => updateCoreMutation.mutate({ source: "auto" })}
+        onSubmitUpload={(file) => uploadCoreMutation.mutate(file)}
+        onSubmitURL={(url) => updateCoreMutation.mutate({ source: "url", url })}
+        open={showCoreUpdateDialog}
+        pending={updateCoreMutation.isPending || uploadCoreMutation.isPending}
+        title={t("update.coreTitle")}
+      />
     </div>
   );
 }

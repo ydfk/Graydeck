@@ -58,3 +58,9 @@ type LogEntry struct {
 	At      string `json:"at"`
 	Message string `json:"message"`
 }
+
+type AuthStatus struct {
+	Enabled       bool   `json:"enabled"`
+	Authenticated bool   `json:"authenticated"`
+	Username      string `json:"username,omitempty"`
+}

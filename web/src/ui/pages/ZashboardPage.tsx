@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type SyntheticEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiPost } from "@/api/client";
+import { apiPost, apiUpload } from "@/api/client";
 import { useSystemStatus } from "@/api/queries";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { SystemStatus } from "@/types/api";
+import { ArtifactUpdateDialog } from "@/ui/components/ArtifactUpdateDialog";
 import { Panel } from "@/ui/components/Panel";
 
 type ZashboardWindow = Window & {
@@ -17,6 +18,8 @@ export function ZashboardPage() {
   const queryClient = useQueryClient();
   const statusQuery = useSystemStatus();
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   const dashboardBackend = useMemo(() => {
     const port = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
@@ -41,14 +44,28 @@ export function ZashboardPage() {
   }, [dashboardBackend]);
 
   const updateMutation = useMutation({
-    mutationFn: () => apiPost<SystemStatus>("/api/zashboard/update"),
+    mutationFn: (payload?: { source: "auto" | "url"; url?: string }) => apiPost<SystemStatus>("/api/zashboard/update", payload),
     onSuccess: async () => {
+      setActionError("");
+      setShowUpdateDialog(false);
       await queryClient.invalidateQueries({ queryKey: ["system-status"] });
     },
+    onError: (error) => setActionError(error instanceof Error ? error.message : t("status.error")),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => apiUpload<SystemStatus>("/api/zashboard/upload", file),
+    onSuccess: async () => {
+      setActionError("");
+      setShowUpdateDialog(false);
+      await queryClient.invalidateQueries({ queryKey: ["system-status"] });
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : t("status.error")),
   });
 
   const status = statusQuery.data;
   const hideSettings = status?.zashboardHideSettings ?? true;
+  const actionLabel = status?.zashboardReady ? t("zashboard.updateNow") : `${t("common.install")}${t("update.zashboardTitle")}`;
 
   function formatVersion(value: string, fallback: string) {
     if (!value) {
@@ -206,11 +223,11 @@ export function ZashboardPage() {
           <>
             <button
               className="secondary-pill"
-              disabled={updateMutation.isPending || (status?.zashboardIsLatest ?? false)}
-              onClick={() => updateMutation.mutate()}
+              disabled={updateMutation.isPending || uploadMutation.isPending}
+              onClick={() => setShowUpdateDialog(true)}
               type="button"
             >
-              {updateMutation.isPending ? t("common.loading") : t("zashboard.updateNow")}
+              {updateMutation.isPending || uploadMutation.isPending ? t("common.loading") : actionLabel}
             </button>
             <button className="primary-pill" onClick={() => setIsFullscreen(true)} type="button">
               {t("common.fullscreen")}
@@ -224,6 +241,7 @@ export function ZashboardPage() {
             {!status.zashboardReady && status.zashboardError ? (
               <div className="status-notice status-notice-error">{status.zashboardError}</div>
             ) : null}
+            {actionError ? <div className="status-notice status-notice-error">{actionError}</div> : null}
             <div className="zashboard-frame-shell">
               <iframe
                 className="zashboard-iframe"
@@ -261,6 +279,18 @@ export function ZashboardPage() {
           </div>
         ) : null}
       </Panel>
+
+      <ArtifactUpdateDialog
+        errorMessage={actionError}
+        fileAccept=".zip"
+        onClose={() => setShowUpdateDialog(false)}
+        onSubmitAuto={() => updateMutation.mutate({ source: "auto" })}
+        onSubmitUpload={(file) => uploadMutation.mutate(file)}
+        onSubmitURL={(url) => updateMutation.mutate({ source: "url", url })}
+        open={showUpdateDialog}
+        pending={updateMutation.isPending || uploadMutation.isPending}
+        title={t("update.zashboardTitle")}
+      />
     </div>
   );
 }

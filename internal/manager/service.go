@@ -70,6 +70,7 @@ func New(cfg Config) (*Service, error) {
 	service.loadInstalledVersions()
 	service.loadRuntimeConfigStatus()
 	service.loadAppConfigStatus()
+	service.appendLog("Graydeck 服务初始化完成")
 
 	service.setRuntimeStatus("stopped", "未找到可用配置文件")
 
@@ -81,41 +82,61 @@ func New(cfg Config) (*Service, error) {
 }
 
 func (s *Service) bootstrap(ctx context.Context) error {
+	s.appendLog("开始执行启动初始化")
+
 	if err := s.refreshCoreMetadata(ctx); err != nil {
+		s.appendLogf("获取核心版本失败：%v", err)
 		s.setRuntimeStatus("error", fmt.Sprintf("获取核心版本失败：%v", err))
 	}
 
 	if err := s.ensureCoreInstalled(ctx); err != nil {
+		s.appendLogf("检查核心安装状态失败：%v", err)
 		s.setRuntimeStatus("error", fmt.Sprintf("下载核心失败：%v", err))
 	}
 
 	if err := s.refreshZashboardMetadata(ctx); err != nil {
+		s.appendLogf("获取 Zashboard 版本失败：%v", err)
 		s.setZashboardStatusError(err.Error())
 	}
 
 	if err := s.ensureZashboardInstalled(ctx); err != nil {
+		s.appendLogf("检查 Zashboard 安装状态失败：%v", err)
 		s.setZashboardStatusError(err.Error())
 	}
 
 	if err := s.RefreshAll(ctx); err != nil {
+		s.appendLogf("启动初始化失败：%v", err)
 		return err
 	}
 
+	s.appendLog("启动初始化完成")
 	return nil
 }
 
 func (s *Service) RefreshAll(ctx context.Context) error {
+	s.appendLog("开始刷新系统状态")
+
 	if err := s.refreshCoreMetadata(ctx); err != nil {
+		s.appendLogf("刷新核心版本失败：%v", err)
 		s.setRuntimeStatus("error", fmt.Sprintf("获取核心版本失败：%v", err))
 	}
 
 	if err := s.refreshZashboardMetadata(ctx); err != nil {
+		s.appendLogf("刷新 Zashboard 版本失败：%v", err)
 		s.setZashboardStatusError(err.Error())
 	}
 
-	_ = s.syncSubscriptions(ctx)
+	if err := s.syncSubscriptions(ctx); err != nil {
+		s.appendLogf("刷新配置文件状态时出现异常：%v", err)
+	}
 
-	return s.ensureRuntime(ctx)
+	if err := s.ensureRuntime(ctx); err != nil {
+		s.appendLogf("刷新运行状态失败：%v", err)
+		return err
+	}
+
+	s.appendLog("系统状态刷新完成")
+	return nil
 }
 
 func (s *Service) Status() model.SystemStatus {
@@ -163,6 +184,8 @@ func (s *Service) CreateSubscription(ctx context.Context, name, rawURL, syncInte
 		return model.Subscription{}, errors.New("名称、地址和同步频率不能为空")
 	}
 
+	s.appendLogf("开始新增配置文件：%s", subscription.Name)
+
 	s.mu.Lock()
 	shouldEnable := len(s.subscriptions) == 0
 	if shouldEnable {
@@ -172,23 +195,28 @@ func (s *Service) CreateSubscription(ctx context.Context, name, rawURL, syncInte
 	s.mu.Unlock()
 
 	if err := s.saveSubscriptions(); err != nil {
+		s.appendLogf("保存配置文件失败：%s，%v", subscription.Name, err)
 		return model.Subscription{}, err
 	}
 
 	if _, err := s.syncSubscription(ctx, subscription.ID); err != nil {
+		s.appendLogf("新增配置文件后首次更新失败：%s，%v", subscription.Name, err)
 		return model.Subscription{}, err
 	}
 
 	if shouldEnable {
 		if _, err := s.ActivateSubscription(ctx, subscription.ID); err != nil {
+			s.appendLogf("新增配置文件后自动启用失败：%s，%v", subscription.Name, err)
 			return model.Subscription{}, err
 		}
 	}
 
+	s.appendLogf("新增配置文件完成：%s", subscription.Name)
 	return s.findSubscription(subscription.ID)
 }
 
 func (s *Service) UpdateSubscription(ctx context.Context, id, name, rawURL, syncInterval string) (model.Subscription, error) {
+	s.appendLogf("开始保存配置文件：%s", strings.TrimSpace(name))
 	s.mu.Lock()
 	found := false
 
@@ -220,11 +248,13 @@ func (s *Service) UpdateSubscription(ctx context.Context, id, name, rawURL, sync
 
 	if err := s.saveSubscriptionsLocked(); err != nil {
 		s.mu.Unlock()
+		s.appendLogf("保存配置文件失败：%s，%v", strings.TrimSpace(name), err)
 		return model.Subscription{}, err
 	}
 	s.mu.Unlock()
 
 	if _, err := s.syncSubscription(ctx, id); err != nil {
+		s.appendLogf("保存配置文件后更新失败：%s，%v", strings.TrimSpace(name), err)
 		return model.Subscription{}, err
 	}
 
@@ -235,20 +265,27 @@ func (s *Service) UpdateSubscription(ctx context.Context, id, name, rawURL, sync
 
 	if subscription.Enabled {
 		if err := s.ensureRuntime(ctx); err != nil {
+			s.appendLogf("保存配置文件后应用失败：%s，%v", subscription.Name, err)
 			return model.Subscription{}, err
 		}
 	}
 
+	s.appendLogf("保存配置文件完成：%s", subscription.Name)
 	return subscription, nil
 }
 
 func (s *Service) ActivateSubscription(ctx context.Context, id string) (model.Subscription, error) {
+	target, _ := s.findSubscription(id)
+	s.appendLogf("开始切换当前配置：%s", target.Name)
+
 	subscription, err := s.syncSubscription(ctx, id)
 	if err != nil {
+		s.appendLogf("切换配置前更新失败：%s，%v", target.Name, err)
 		return model.Subscription{}, err
 	}
 
 	if subscription.Status != "ready" && subscription.Status != "active" {
+		s.appendLogf("切换配置失败：%s 当前状态不可用", subscription.Name)
 		return model.Subscription{}, errors.New("当前配置文件不可用，无法切换")
 	}
 
@@ -268,9 +305,11 @@ func (s *Service) ActivateSubscription(ctx context.Context, id string) (model.Su
 	s.mu.Unlock()
 
 	if err := s.ensureRuntime(ctx); err != nil {
+		s.appendLogf("切换配置后应用失败：%s，%v", subscription.Name, err)
 		return model.Subscription{}, err
 	}
 
+	s.appendLogf("当前配置已切换：%s", subscription.Name)
 	return s.findSubscription(id)
 }
 
@@ -293,6 +332,10 @@ func (s *Service) PreviewSubscription(id string) (model.SubscriptionPreview, err
 }
 
 func (s *Service) RuntimeConfigPreview() (model.RuntimeConfigPreview, error) {
+	if enabled, ok := s.enabledSubscription(); !ok || strings.TrimSpace(enabled.Name) == "" {
+		return model.RuntimeConfigPreview{}, errors.New("当前没有可查看的运行配置")
+	}
+
 	content, err := os.ReadFile(s.currentConfigPath())
 	if err != nil {
 		return model.RuntimeConfigPreview{}, err
@@ -330,35 +373,36 @@ func (s *Service) UpdateDefaultConfig(ctx context.Context, config model.DefaultR
 }
 
 func (s *Service) UpdateCore(ctx context.Context) (model.SystemStatus, error) {
-	if err := s.refreshCoreMetadata(ctx); err != nil {
-		return model.SystemStatus{}, err
-	}
-
-	if err := s.downloadCore(ctx); err != nil {
+	s.appendLog("开始更新 mihomo 核心")
+	if err := s.installCoreFromAuto(ctx); err != nil {
+		s.appendLogf("更新 mihomo 核心失败：%v", err)
 		return model.SystemStatus{}, err
 	}
 
 	if err := s.ensureRuntime(ctx); err != nil {
+		s.appendLogf("更新 mihomo 核心后重载失败：%v", err)
 		return model.SystemStatus{}, err
 	}
 
+	s.appendLog("mihomo 核心更新完成")
 	return s.Status(), nil
 }
 
 func (s *Service) UpdateZashboard(ctx context.Context) (model.SystemStatus, error) {
-	if err := s.refreshZashboardMetadata(ctx); err != nil {
+	s.appendLog("开始更新 Zashboard")
+	if err := s.installZashboardFromAuto(ctx); err != nil {
+		s.appendLogf("更新 Zashboard 失败：%v", err)
 		return model.SystemStatus{}, err
 	}
 
-	if err := s.downloadZashboard(ctx); err != nil {
-		return model.SystemStatus{}, err
-	}
-
+	s.appendLog("Zashboard 更新完成")
 	return s.Status(), nil
 }
 
 func (s *Service) StartRuntime(ctx context.Context) (model.SystemStatus, error) {
+	s.appendLog("收到启动核心请求")
 	if err := s.ensureRuntime(ctx); err != nil {
+		s.appendLogf("启动核心失败：%v", err)
 		return model.SystemStatus{}, err
 	}
 
@@ -366,9 +410,11 @@ func (s *Service) StartRuntime(ctx context.Context) (model.SystemStatus, error) 
 }
 
 func (s *Service) RestartRuntime(ctx context.Context) (model.SystemStatus, error) {
+	s.appendLog("收到重启核心请求")
 	s.stopCore()
 
 	if err := s.ensureRuntime(ctx); err != nil {
+		s.appendLogf("重启核心失败：%v", err)
 		return model.SystemStatus{}, err
 	}
 
@@ -376,6 +422,7 @@ func (s *Service) RestartRuntime(ctx context.Context) (model.SystemStatus, error
 }
 
 func (s *Service) StopRuntime() model.SystemStatus {
+	s.appendLog("收到停止核心请求")
 	s.stopCore()
 	s.setRuntimeStatus("stopped", "")
 	s.appendLog("核心已停止")
@@ -418,28 +465,35 @@ func (s *Service) syncSubscription(ctx context.Context, id string) (model.Subscr
 		return model.Subscription{}, err
 	}
 
+	s.appendLogf("开始更新配置文件：%s", subscription.Name)
+
 	if subscription.URL == "" {
+		s.appendLogf("更新配置文件失败：%s，订阅地址为空", subscription.Name)
 		return model.Subscription{}, errors.New("配置文件地址不能为空")
 	}
 
 	content, err := s.fetchText(ctx, subscription.URL)
 	if err != nil {
+		s.appendLogf("拉取配置文件失败：%s，%v", subscription.Name, err)
 		s.updateSubscriptionStatus(id, "fetch_failed", fmt.Sprintf("订阅拉取失败：%v", err), false)
 		return model.Subscription{}, err
 	}
 
 	if err := os.WriteFile(s.subscriptionPreviewPath(id), []byte(content), 0o644); err != nil {
+		s.appendLogf("写入配置预览失败：%s，%v", subscription.Name, err)
 		return model.Subscription{}, err
 	}
 
 	validatePath, cleanup, err := s.buildValidationConfig(id)
 	if err != nil {
+		s.appendLogf("生成校验配置失败：%s，%v", subscription.Name, err)
 		s.updateSubscriptionStatus(id, "validation_failed", fmt.Sprintf("生成运行配置失败：%v", err), true)
 		return model.Subscription{}, err
 	}
 	defer cleanup()
 
 	if err := s.validateConfigFile(validatePath); err != nil {
+		s.appendLogf("配置校验失败：%s，%v", subscription.Name, err)
 		s.updateSubscriptionStatus(id, "validation_failed", err.Error(), true)
 		return model.Subscription{}, err
 	}
@@ -465,6 +519,7 @@ func (s *Service) syncSubscription(ctx context.Context, id string) (model.Subscr
 		s.mu.Unlock()
 	}
 
+	s.appendLogf("配置文件可用：%s", subscription.Name)
 	return s.findSubscription(id)
 }
 
@@ -472,24 +527,32 @@ func (s *Service) ensureRuntime(ctx context.Context) error {
 	enabled, ok := s.enabledSubscription()
 	if !ok {
 		s.stopCore()
+		s.setCurrentConfigName("")
+		s.appendLog("当前没有可用配置文件，核心不会启动")
 		s.setRuntimeStatus("stopped", "未选择当前配置文件")
 		return nil
 	}
 
 	if enabled.Status != "active" && enabled.Status != "ready" {
 		s.stopCore()
+		s.setCurrentConfigName("")
+		s.appendLogf("当前配置不可用，核心不会启动：%s，%s", enabled.Name, enabled.LastFailureReason)
 		s.setRuntimeStatus("error", enabled.LastFailureReason)
 		return nil
 	}
 
 	if err := s.writeRuntimeConfig(s.subscriptionPreviewPath(enabled.ID), s.currentConfigPath()); err != nil {
 		s.stopCore()
+		s.setCurrentConfigName("")
+		s.appendLogf("生成运行配置失败：%s，%v", enabled.Name, err)
 		s.setRuntimeStatus("error", fmt.Sprintf("应用配置失败：%v", err))
 		return err
 	}
 
 	if !s.isCoreReady() {
 		s.stopCore()
+		s.setCurrentConfigName(enabled.Name)
+		s.appendLog("mihomo 核心未安装，无法启动")
 		s.setRuntimeStatus("error", "未找到可执行核心文件")
 		return nil
 	}
@@ -510,6 +573,7 @@ func (s *Service) ensureRuntime(ctx context.Context) error {
 	}
 
 	if err := command.Start(); err != nil {
+		s.appendLogf("启动 mihomo 核心进程失败：%v", err)
 		s.setRuntimeStatus("error", fmt.Sprintf("启动核心失败：%v", err))
 		return err
 	}
@@ -594,6 +658,7 @@ func (s *Service) validateConfigFile(path string) error {
 		return fmt.Errorf("格式校验失败：%s", message)
 	}
 
+	s.appendLogf("配置校验通过：%s", filepath.Base(path))
 	return nil
 }
 
@@ -709,7 +774,7 @@ func (s *Service) ensureLayout() error {
 }
 
 func (s *Service) loadInstalledVersions() {
-	coreVersion := readTrimmedFile(filepath.Join(s.coreDir(), "version.txt"))
+	coreVersion := s.detectInstalledCoreVersion()
 	zashboardVersion := s.detectInstalledZashboardVersion()
 
 	s.mu.Lock()
@@ -738,6 +803,13 @@ func (s *Service) setRuntimeStatus(status, reason string) {
 
 	s.status.RuntimeStatus = status
 	s.status.RuntimeError = reason
+}
+
+func (s *Service) setCurrentConfigName(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.status.CurrentConfigName = strings.TrimSpace(name)
 }
 
 func (s *Service) setZashboardStatusError(reason string) {
@@ -833,6 +905,10 @@ func (s *Service) loadManagedRuntimeValues() managedRuntimeValues {
 			socksPort:  s.cfg.RuntimeSocksPort,
 			redirPort:  s.cfg.RuntimeRedirPort,
 			tproxyPort: s.cfg.RuntimeTProxyPort,
+			bindAddr:   "0.0.0.0",
+			allowLAN:   "true",
+			mode:       "rule",
+			logLevel:   "info",
 			controller: s.cfg.ControllerAddr,
 			secret:     s.cfg.RuntimeSecret,
 		}
@@ -843,6 +919,10 @@ func (s *Service) loadManagedRuntimeValues() managedRuntimeValues {
 		socksPort:  s.cfg.RuntimeSocksPort,
 		redirPort:  s.cfg.RuntimeRedirPort,
 		tproxyPort: s.cfg.RuntimeTProxyPort,
+		bindAddr:   "0.0.0.0",
+		allowLAN:   "true",
+		mode:       "rule",
+		logLevel:   "info",
 		controller: s.cfg.ControllerAddr,
 		secret:     s.cfg.RuntimeSecret,
 	})

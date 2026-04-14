@@ -45,7 +45,12 @@ npm install -g pnpm
 `config/` 下包含这些内容：
 
 - `config/base.yaml`：基础运行配置，启动时会注入到最终运行配置
-- `config/graydeck.yaml`：Graydeck 服务配置，例如 `zashboard.hide-settings`
+- `config/graydeck.yaml`：Graydeck 服务配置，例如 `auth.username`、`auth.password`、`update.prefer-proxy`、`update.proxy-url`、`zashboard.hide-settings`
+
+`config/base.yaml` 在 Docker 场景下至少要保留这几个基础项：
+
+- `bind-address: "0.0.0.0"`
+- `allow-lan: true`
 
 `data/` 下会生成这些内容：
 
@@ -86,6 +91,22 @@ pnpm run dev:web
 - 前端：`http://localhost:5173`
 - 后端：`http://localhost:18080`
 
+默认登录配置在 `config/graydeck.yaml`：
+
+```yaml
+auth:
+  enabled: true
+  username: admin
+  password: admin123
+update:
+  prefer-proxy: true
+  proxy-url: https://ghfast.top/
+zashboard:
+  hide-settings: true
+```
+
+启动后，未登录无法查看控制台、日志、`Zashboard` 和后端 API。
+
 ## 可用环境变量
 
 ```powershell
@@ -103,8 +124,10 @@ $env:GRAYDECK_SECRET="graydeck-secret"
 ### 核心
 
 - 如果本地没有 `mihomo` 核心，后端启动时会自动拉取最新正式版
+- 自动更新会优先尝试 `config/graydeck.yaml` 里的代理地址，失败后再回退到原始地址
 - 当前核心版本和最新版本会显示在控制台
 - 如果检测到新版本，可以在界面里手动升级
+- 核心安装和升级都支持 3 种来源：系统自动更新、手动指定地址、上传文件
 
 ### 配置文件
 
@@ -117,8 +140,11 @@ $env:GRAYDECK_SECRET="graydeck-secret"
 ### Zashboard
 
 - 如果本地没有 `zashboard` 资源，后端启动时会自动拉取最新版本
+- 自动更新会优先尝试 `config/graydeck.yaml` 里的代理地址，失败后再回退到原始地址
 - `Zashboard` 页面会显示当前版本、最新版本和升级入口
+- `Zashboard` 安装和升级也支持系统自动更新、手动指定地址、上传文件
 - 页面路由使用 `/zashboard-ui/`
+- `config/graydeck.yaml` 中的 `zashboard.hide-settings` 默认为 `true`
 
 ## 常用命令
 
@@ -176,6 +202,8 @@ Compose 示例会同时挂载：
 - `./data:/data`
 
 Compose 示例还额外映射了常用 mihomo 端口：`7890`、`7891`、`7892`、`7893`（含必要 UDP），便于直接在宿主机使用代理能力。
+
+镜像内 `mihomo` 默认监听的是 `17890`、`17891`、`17892`、`17893`，Compose 已经把它们映射成宿主机常见端口 `7890`、`7891`、`7892`、`7893`。
 
 `cap_add: NET_ADMIN` 与 `/dev/net/tun` 设备挂载仅在你需要 TUN/透明代理时才必须；如果只使用普通 HTTP/SOCKS 代理，可移除这两项。
 

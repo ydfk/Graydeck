@@ -12,11 +12,13 @@ type SubscriptionTableProps = {
   subscriptions: Subscription[]
   switchingId: string | null
   savingId: string | null
+  syncingId: string | null
   previewingId: string | null
   creating: boolean
   showCreateForm: boolean
   onCreate: (fields: EditableFields) => void
   onUpdate: (id: string, fields: EditableFields) => void
+  onSync: (id: string) => void
   onActivate: (id: string) => void
   onPreview: (id: string) => void
   onHideCreateForm: () => void
@@ -32,11 +34,13 @@ export function SubscriptionTable({
   subscriptions,
   switchingId,
   savingId,
+  syncingId,
   previewingId,
   creating,
   showCreateForm,
   onCreate,
   onUpdate,
+  onSync,
   onActivate,
   onPreview,
   onHideCreateForm,
@@ -105,7 +109,7 @@ export function SubscriptionTable({
 
   return (
     <div className="table-stack">
-      {(switchingId || savingId || previewingId || creating) && (
+      {(switchingId || savingId || syncingId || previewingId || creating) && (
         <div className="status-notice">{t('common.loading')}</div>
       )}
       {showCreateForm ? (
@@ -242,6 +246,14 @@ export function SubscriptionTable({
                           type="button"
                         >
                           {t('subscription.edit')}
+                        </button>
+                        <button
+                          className="secondary-pill table-action-button"
+                          disabled={syncingId === subscription.id}
+                          onClick={() => onSync(subscription.id)}
+                          type="button"
+                        >
+                          {syncingId === subscription.id ? t('common.loading') : t('subscription.sync')}
                         </button>
                         <button
                           className="secondary-pill table-action-button"
