@@ -33,6 +33,7 @@ func (r *Router) registerRoutes() {
 	r.mux.HandleFunc("/api/healthz", r.handleHealth)
 	r.mux.HandleFunc("/api/system/status", r.handleSystemStatus)
 	r.mux.HandleFunc("/api/system/config/current", r.handleSystemCurrentConfig)
+	r.mux.HandleFunc("/api/system/config/default", r.handleSystemDefaultConfig)
 	r.mux.HandleFunc("/api/system/refresh", r.handleSystemRefresh)
 	r.mux.HandleFunc("/api/system/start", r.handleSystemStart)
 	r.mux.HandleFunc("/api/system/restart", r.handleSystemRestart)
@@ -77,6 +78,29 @@ func (r *Router) handleSystemCurrentConfig(w http.ResponseWriter, req *http.Requ
 	}
 
 	writeJSON(w, http.StatusOK, preview)
+}
+
+func (r *Router) handleSystemDefaultConfig(w http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, r.service.DefaultConfig())
+	case http.MethodPost:
+		var payload model.DefaultRuntimeConfig
+		if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		status, err := r.service.UpdateDefaultConfig(req.Context(), payload)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, status)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
 
 func (r *Router) handleSystemRefresh(w http.ResponseWriter, req *http.Request) {

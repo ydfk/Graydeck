@@ -18,10 +18,10 @@ type SystemStatus struct {
 	RuntimeStatus          string `json:"runtimeStatus"`
 	RuntimeError           string `json:"runtimeError"`
 	CurrentConfigName      string `json:"currentConfigName"`
-	BaseConfigPath         string `json:"baseConfigPath"`
 	RuntimeMixedPort       string `json:"runtimeMixedPort"`
-	RuntimeControllerAddr  string `json:"runtimeControllerAddr"`
-	RuntimeSecret          string `json:"runtimeSecret"`
+	RuntimeSocksPort       string `json:"runtimeSocksPort"`
+	RuntimeRedirPort       string `json:"runtimeRedirPort"`
+	RuntimeTProxyPort      string `json:"runtimeTProxyPort"`
 	CoreVersion            string `json:"coreVersion"`
 	CoreLatestVersion      string `json:"coreLatestVersion"`
 	CoreIsLatest           bool   `json:"coreIsLatest"`
@@ -31,6 +31,7 @@ type SystemStatus struct {
 	ZashboardIsLatest      bool   `json:"zashboardIsLatest"`
 	ZashboardReady         bool   `json:"zashboardReady"`
 	ZashboardError         string `json:"zashboardError"`
+	ZashboardHideSettings  bool   `json:"zashboardHideSettings"`
 }
 
 type SubscriptionPreview struct {
@@ -43,6 +44,14 @@ type RuntimeConfigPreview struct {
 	Name    string `json:"name"`
 	Path    string `json:"path"`
 	Content string `json:"content"`
+}
+
+type DefaultRuntimeConfig struct {
+	Path       string `json:"path"`
+	MixedPort  string `json:"mixedPort"`
+	SocksPort  string `json:"socksPort"`
+	RedirPort  string `json:"redirPort"`
+	TProxyPort string `json:"tproxyPort"`
 }
 
 type LogEntry struct {

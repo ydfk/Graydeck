@@ -2,10 +2,10 @@ export type SystemStatus = {
   runtimeStatus: string;
   runtimeError: string;
   currentConfigName: string;
-  baseConfigPath: string;
   runtimeMixedPort: string;
-  runtimeControllerAddr: string;
-  runtimeSecret: string;
+  runtimeSocksPort: string;
+  runtimeRedirPort: string;
+  runtimeTProxyPort: string;
   coreVersion: string;
   coreLatestVersion: string;
   coreIsLatest: boolean;
@@ -15,6 +15,7 @@ export type SystemStatus = {
   zashboardIsLatest: boolean;
   zashboardReady: boolean;
   zashboardError: string;
+  zashboardHideSettings: boolean;
 };
 
 export type Subscription = {

@@ -3,7 +3,10 @@ package manager
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+
+	"mihomo-manager/internal/model"
 )
 
 type managedRuntimeValues struct {
@@ -20,7 +23,41 @@ func (s *Service) ensureBaseConfig() error {
 		return nil
 	}
 
+	if err := s.migrateLegacyBaseConfig(); err != nil {
+		return err
+	}
+
+	if fileExists(s.cfg.BaseConfigPath) {
+		return nil
+	}
+
 	return os.WriteFile(s.cfg.BaseConfigPath, []byte(s.defaultBaseConfigContent()), 0o644)
+}
+
+func (s *Service) migrateLegacyBaseConfig() error {
+	legacyPaths := []string{
+		filepath.Join(s.cfg.DataDir, "config", "base.yaml"),
+		filepath.Join(s.runtimeDir(), "base.yaml"),
+	}
+
+	for _, legacyPath := range legacyPaths {
+		if legacyPath == s.cfg.BaseConfigPath || !fileExists(legacyPath) {
+			continue
+		}
+
+		content, err := os.ReadFile(legacyPath)
+		if err != nil {
+			return err
+		}
+
+		if err := os.WriteFile(s.cfg.BaseConfigPath, content, 0o644); err != nil {
+			return err
+		}
+
+		return os.Remove(legacyPath)
+	}
+
+	return nil
 }
 
 func (s *Service) defaultBaseConfigContent() string {
@@ -116,6 +153,45 @@ func (s *Service) buildValidationConfig(id string) (string, func(), error) {
 	}, nil
 }
 
+func (s *Service) DefaultRuntimeConfig() model.DefaultRuntimeConfig {
+	values := s.loadManagedRuntimeValues()
+	return model.DefaultRuntimeConfig{
+		Path:       s.cfg.BaseConfigPath,
+		MixedPort:  values.mixedPort,
+		SocksPort:  values.socksPort,
+		RedirPort:  values.redirPort,
+		TProxyPort: values.tproxyPort,
+	}
+}
+
+func (s *Service) UpdateDefaultRuntimeConfig(values model.DefaultRuntimeConfig) error {
+	updated := managedRuntimeValues{
+		mixedPort:  strings.TrimSpace(values.MixedPort),
+		socksPort:  strings.TrimSpace(values.SocksPort),
+		redirPort:  strings.TrimSpace(values.RedirPort),
+		tproxyPort: strings.TrimSpace(values.TProxyPort),
+	}
+
+	if err := validatePortValue(updated.mixedPort, true); err != nil {
+		return fmt.Errorf("mixed-port %v", err)
+	}
+	if err := validatePortValue(updated.socksPort, false); err != nil {
+		return fmt.Errorf("socks-port %v", err)
+	}
+	if err := validatePortValue(updated.redirPort, false); err != nil {
+		return fmt.Errorf("redir-port %v", err)
+	}
+	if err := validatePortValue(updated.tproxyPort, false); err != nil {
+		return fmt.Errorf("tproxy-port %v", err)
+	}
+
+	current := s.loadManagedRuntimeValues()
+	updated.controller = current.controller
+	updated.secret = current.secret
+
+	return s.saveManagedRuntimeValues(updated)
+}
+
 func stripTopLevelKeys(content string, keys ...string) string {
 	lines := strings.Split(content, "\n")
 	filtered := make([]string, 0, len(lines))
@@ -176,6 +252,21 @@ func isDigitsOnly(value string) bool {
 	return true
 }
 
+func validatePortValue(value string, required bool) error {
+	if value == "" {
+		if required {
+			return fmt.Errorf("不能为空")
+		}
+		return nil
+	}
+
+	if !isDigitsOnly(value) {
+		return fmt.Errorf("必须为数字")
+	}
+
+	return nil
+}
+
 func parseManagedRuntimeValues(content string, fallback managedRuntimeValues) managedRuntimeValues {
 	values := fallback
 
@@ -206,6 +297,44 @@ func parseManagedRuntimeValues(content string, fallback managedRuntimeValues) ma
 	}
 
 	return values
+}
+
+func (s *Service) saveManagedRuntimeValues(values managedRuntimeValues) error {
+	currentContent, err := os.ReadFile(s.cfg.BaseConfigPath)
+	if err != nil {
+		return err
+	}
+
+	managedKeys := []string{
+		"mixed-port",
+		"socks-port",
+		"redir-port",
+		"tproxy-port",
+		"external-controller",
+		"secret",
+	}
+
+	managedSection := strings.TrimSpace(fmt.Sprintf(`
+mixed-port: %s
+socks-port: %s
+redir-port: %s
+tproxy-port: %s
+external-controller: %s
+secret: %s
+`, yamlScalar(values.mixedPort), yamlScalar(values.socksPort), yamlScalar(values.redirPort), yamlScalar(values.tproxyPort), yamlString(values.controller), yamlString(values.secret)))
+
+	extraSection := strings.TrimSpace(stripTopLevelKeys(string(currentContent), managedKeys...))
+	sections := []string{managedSection}
+	if extraSection != "" {
+		sections = append(sections, extraSection)
+	}
+
+	if err := os.WriteFile(s.cfg.BaseConfigPath, []byte(strings.Join(sections, "\n\n")+"\n"), 0o644); err != nil {
+		return err
+	}
+
+	s.loadRuntimeConfigStatus()
+	return nil
 }
 
 func parseYAMLScalar(value string) string {

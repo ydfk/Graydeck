@@ -34,12 +34,18 @@ npm install -g pnpm
 ```text
 .
 ├─ cmd/managerd
+├─ config/               # 服务配置与基础运行配置
 ├─ internal/
 ├─ web/
 ├─ data/                 # 运行时数据目录，首次启动后自动生成
 ├─ DOCKER_IMAGE_DESIGN.md
 └─ web/DESIGN.md
 ```
+
+`config/` 下包含这些内容：
+
+- `config/base.yaml`：基础运行配置，启动时会注入到最终运行配置
+- `config/graydeck.yaml`：Graydeck 服务配置，例如 `zashboard.hide-settings`
 
 `data/` 下会生成这些内容：
 
@@ -163,6 +169,11 @@ docker compose -f docker-compose.example.yml up -d --build
 访问地址：
 
 - `http://localhost:8080`
+
+Compose 示例会同时挂载：
+
+- `./config:/config`
+- `./data:/data`
 
 Compose 示例还额外映射了常用 mihomo 端口：`7890`、`7891`、`7892`、`7893`（含必要 UDP），便于直接在宿主机使用代理能力。
 

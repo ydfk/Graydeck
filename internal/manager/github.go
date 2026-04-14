@@ -121,13 +121,16 @@ func (s *Service) refreshZashboardMetadata(ctx context.Context) error {
 
 func (s *Service) ensureZashboardInstalled(ctx context.Context) error {
 	if _, err := os.Stat(filepath.Join(s.zashboardRoot(), "index.html")); err == nil {
-	s.mu.Lock()
-	s.status.ZashboardReady = true
-	s.status.ZashboardError = ""
-	s.syncInstallStateLocked()
-	s.mu.Unlock()
-	return nil
-}
+		installedVersion := s.detectInstalledZashboardVersion()
+
+		s.mu.Lock()
+		s.status.ZashboardVersion = installedVersion
+		s.status.ZashboardReady = true
+		s.status.ZashboardError = ""
+		s.syncInstallStateLocked()
+		s.mu.Unlock()
+		return nil
+	}
 
 	return s.downloadZashboard(ctx)
 }
@@ -160,14 +163,19 @@ func (s *Service) downloadZashboard(ctx context.Context) error {
 		return errors.New("zashboard 资源校验失败：缺少 index.html")
 	}
 
+	installedVersion := s.detectInstalledZashboardVersion()
+	if installedVersion == "" {
+		installedVersion = release.TagName
+	}
+
 	s.mu.Lock()
-	s.status.ZashboardVersion = release.TagName
+	s.status.ZashboardVersion = installedVersion
 	s.status.ZashboardLatestVersion = release.TagName
 	s.status.ZashboardError = ""
 	s.syncInstallStateLocked()
 	s.mu.Unlock()
 
-	if err := os.WriteFile(filepath.Join(s.zashboardDir(), "version.txt"), []byte(release.TagName+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.zashboardDir(), "version.txt"), []byte(installedVersion+"\n"), 0o644); err != nil {
 		return err
 	}
 

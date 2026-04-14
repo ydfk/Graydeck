@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/api/client";
 import { useSubscriptions, useSystemStatus } from "@/api/queries";
@@ -126,7 +126,21 @@ export function OverviewPage() {
 
   const systemStatus = statusQuery.data;
   const subscriptions = subscriptionsQuery.data?.items ?? [];
-  const runtimeActionPending = startRuntimeMutation.isPending || restartRuntimeMutation.isPending || stopRuntimeMutation.isPending;
+  const runtimeActionPending =
+    startRuntimeMutation.isPending || restartRuntimeMutation.isPending || stopRuntimeMutation.isPending;
+
+  const runtimePorts = useMemo(
+    () =>
+      systemStatus
+        ? [
+            { key: "mixed", label: t("config.mixedPort"), value: systemStatus.runtimeMixedPort },
+            { key: "socks", label: t("config.socksPort"), value: systemStatus.runtimeSocksPort },
+            { key: "redir", label: t("config.redirPort"), value: systemStatus.runtimeRedirPort },
+            { key: "tproxy", label: t("config.tproxyPort"), value: systemStatus.runtimeTProxyPort },
+          ]
+        : [],
+    [systemStatus, t],
+  );
 
   const versionStatusLabel = useMemo(() => {
     if (!systemStatus) {
@@ -145,7 +159,11 @@ export function OverviewPage() {
       return fallback;
     }
 
-    if (value === "installed" || value === "unknown") {
+    if (value === "installed") {
+      return t("common.installed");
+    }
+
+    if (value === "unknown") {
       return t("core.unknown");
     }
 
@@ -212,7 +230,9 @@ export function OverviewPage() {
                   <td>
                     <div className="cell-stack">
                       <div className="table-actions">
-                        <span className={getRuntimeBadgeClass(systemStatus.runtimeStatus)}>{getRuntimeLabel(systemStatus.runtimeStatus)}</span>
+                        <span className={getRuntimeBadgeClass(systemStatus.runtimeStatus)}>
+                          {getRuntimeLabel(systemStatus.runtimeStatus)}
+                        </span>
                         {systemStatus.runtimeStatus === "running" ? (
                           <>
                             <button
@@ -259,44 +279,38 @@ export function OverviewPage() {
                   </td>
                 </tr>
                 <tr>
-                  <th>{t("system.runtimeBase")}</th>
-                  <td>{systemStatus.baseConfigPath || t("common.empty")}</td>
-                </tr>
-                <tr>
                   <th>{t("system.runtimeManaged")}</th>
                   <td>
                     <div className="table-actions">
-                      <span className="summary-label">mixed-port</span>
-                      <span className="summary-value-inline">{systemStatus.runtimeMixedPort || t("common.empty")}</span>
-                      <span className="summary-label">external-controller</span>
-                      <span className="summary-value-inline">{systemStatus.runtimeControllerAddr || t("common.empty")}</span>
-                      <span className="summary-label">secret</span>
-                      <span className="summary-value-inline">{systemStatus.runtimeSecret || t("common.empty")}</span>
+                      {runtimePorts.map((item) => (
+                        <Fragment key={item.key}>
+                          <span className="summary-label">{item.label}</span>
+                          <span className="summary-value-inline">{item.value || t("common.empty")}</span>
+                        </Fragment>
+                      ))}
                     </div>
                   </td>
                 </tr>
                 <tr>
                   <th>{t("core.groupTitle")}</th>
                   <td>
-                    <div className="cell-stack">
-                      <div className="table-actions">
-                        <span className="summary-label">{t("core.currentVersion")}</span>
-                        <span className="summary-value-inline">{formatVersion(systemStatus.coreVersion, t("core.notReady"))}</span>
-                        <span className="summary-label">{t("core.latestVersion")}</span>
-                        <span className="summary-value-inline">{formatVersion(systemStatus.coreLatestVersion, t("core.unknown"))}</span>
-                        <span className="summary-label">{t("core.versionStatus")}</span>
-                        <span className={getCoreVersionBadgeClass()}>{versionStatusLabel}</span>
-                        {systemStatus.coreExecutableReady && !systemStatus.coreIsLatest ? (
-                          <button
-                            className="primary-pill table-action-button"
-                            disabled={updateCoreMutation.isPending}
-                            onClick={() => updateCoreMutation.mutate()}
-                            type="button"
-                          >
-                            {updateCoreMutation.isPending ? t("common.loading") : t("core.updateNow")}
-                          </button>
-                        ) : null}
-                      </div>
+                    <div className="table-actions">
+                      <span className="summary-label">{t("core.currentVersion")}</span>
+                      <span className="summary-value-inline">{formatVersion(systemStatus.coreVersion, t("core.notReady"))}</span>
+                      <span className="summary-label">{t("core.latestVersion")}</span>
+                      <span className="summary-value-inline">{formatVersion(systemStatus.coreLatestVersion, t("core.unknown"))}</span>
+                      <span className="summary-label">{t("core.versionStatus")}</span>
+                      <span className={getCoreVersionBadgeClass()}>{versionStatusLabel}</span>
+                      {systemStatus.coreExecutableReady && !systemStatus.coreIsLatest ? (
+                        <button
+                          className="primary-pill table-action-button"
+                          disabled={updateCoreMutation.isPending}
+                          onClick={() => updateCoreMutation.mutate()}
+                          type="button"
+                        >
+                          {updateCoreMutation.isPending ? t("common.loading") : t("core.updateNow")}
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -326,10 +340,10 @@ export function OverviewPage() {
           onPreview={(id) => setPreviewId(id)}
           onUpdate={(id, payload) => updateSubscriptionMutation.mutate({ id, ...payload })}
           previewingId={previewQuery.isFetching ? previewId : null}
-          savingId={updateSubscriptionMutation.isPending ? (updateSubscriptionMutation.variables?.id ?? null) : null}
+          savingId={updateSubscriptionMutation.isPending ? updateSubscriptionMutation.variables?.id ?? null : null}
           showCreateForm={showCreateForm}
           subscriptions={subscriptions}
-          switchingId={activateSubscriptionMutation.isPending ? (activateSubscriptionMutation.variables ?? null) : null}
+          switchingId={activateSubscriptionMutation.isPending ? activateSubscriptionMutation.variables ?? null : null}
         />
       </Panel>
 

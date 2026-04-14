@@ -29,6 +29,7 @@ type Config struct {
 	RuntimeTProxyPort string
 	RuntimeSecret     string
 	BaseConfigPath    string
+	AppConfigPath     string
 	WebRoot           string
 }
 
@@ -58,12 +59,17 @@ func New(cfg Config) (*Service, error) {
 		return nil, err
 	}
 
+	if err := service.ensureAppConfig(); err != nil {
+		return nil, err
+	}
+
 	if err := service.loadSubscriptions(); err != nil {
 		return nil, err
 	}
 
 	service.loadInstalledVersions()
 	service.loadRuntimeConfigStatus()
+	service.loadAppConfigStatus()
 
 	service.setRuntimeStatus("stopped", "未找到可用配置文件")
 
@@ -114,6 +120,7 @@ func (s *Service) RefreshAll(ctx context.Context) error {
 
 func (s *Service) Status() model.SystemStatus {
 	s.loadRuntimeConfigStatus()
+	s.loadAppConfigStatus()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -304,6 +311,22 @@ func (s *Service) RuntimeConfigPreview() (model.RuntimeConfigPreview, error) {
 		Path:    s.currentConfigPath(),
 		Content: string(content),
 	}, nil
+}
+
+func (s *Service) DefaultConfig() model.DefaultRuntimeConfig {
+	return s.DefaultRuntimeConfig()
+}
+
+func (s *Service) UpdateDefaultConfig(ctx context.Context, config model.DefaultRuntimeConfig) (model.SystemStatus, error) {
+	if err := s.UpdateDefaultRuntimeConfig(config); err != nil {
+		return model.SystemStatus{}, err
+	}
+
+	if err := s.ensureRuntime(ctx); err != nil {
+		return model.SystemStatus{}, err
+	}
+
+	return s.Status(), nil
 }
 
 func (s *Service) UpdateCore(ctx context.Context) (model.SystemStatus, error) {
@@ -673,6 +696,7 @@ func (s *Service) ensureLayout() error {
 		s.zashboardDir(),
 		s.subscriptionDir(),
 		filepath.Dir(s.cfg.BaseConfigPath),
+		filepath.Dir(s.cfg.AppConfigPath),
 	}
 
 	for _, path := range paths {
@@ -685,14 +709,14 @@ func (s *Service) ensureLayout() error {
 }
 
 func (s *Service) loadInstalledVersions() {
-	if version, err := os.ReadFile(filepath.Join(s.coreDir(), "version.txt")); err == nil {
-		s.status.CoreVersion = strings.TrimSpace(string(version))
-	}
+	coreVersion := readTrimmedFile(filepath.Join(s.coreDir(), "version.txt"))
+	zashboardVersion := s.detectInstalledZashboardVersion()
 
-	if version, err := os.ReadFile(filepath.Join(s.zashboardDir(), "version.txt")); err == nil {
-		s.status.ZashboardVersion = strings.TrimSpace(string(version))
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
+	s.status.CoreVersion = coreVersion
+	s.status.ZashboardVersion = zashboardVersion
 	s.syncInstallStateLocked()
 }
 
@@ -702,10 +726,10 @@ func (s *Service) loadRuntimeConfigStatus() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.status.BaseConfigPath = s.cfg.BaseConfigPath
 	s.status.RuntimeMixedPort = values.mixedPort
-	s.status.RuntimeControllerAddr = values.controller
-	s.status.RuntimeSecret = values.secret
+	s.status.RuntimeSocksPort = values.socksPort
+	s.status.RuntimeRedirPort = values.redirPort
+	s.status.RuntimeTProxyPort = values.tproxyPort
 }
 
 func (s *Service) setRuntimeStatus(status, reason string) {
@@ -785,23 +809,14 @@ func (s *Service) syncInstallStateLocked() {
 	s.status.CoreExecutableReady = fileExists(s.coreExecutablePath())
 	s.status.ZashboardReady = fileExists(filepath.Join(s.zashboardRoot(), "index.html"))
 
-	if s.status.CoreVersion == "" || s.status.CoreLatestVersion == "" {
-		s.status.CoreIsLatest = false
-	} else {
-		s.status.CoreIsLatest = s.status.CoreVersion == s.status.CoreLatestVersion
-	}
-
-	if s.status.ZashboardVersion == "" || s.status.ZashboardLatestVersion == "" {
-		s.status.ZashboardIsLatest = false
-	} else {
-		s.status.ZashboardIsLatest = s.status.ZashboardVersion == s.status.ZashboardLatestVersion
-	}
+	s.status.CoreIsLatest = sameVersion(s.status.CoreVersion, s.status.CoreLatestVersion)
+	s.status.ZashboardIsLatest = sameVersion(s.status.ZashboardVersion, s.status.ZashboardLatestVersion)
 
 	if s.status.ZashboardReady && s.status.ZashboardVersion == "" {
 		if s.status.ZashboardLatestVersion != "" {
 			s.status.ZashboardVersion = s.status.ZashboardLatestVersion
 		} else {
-			s.status.ZashboardVersion = "unknown"
+			s.status.ZashboardVersion = "installed"
 		}
 	}
 

@@ -24,6 +24,7 @@ func NewServer(cfg Config) (*Server, error) {
 		RuntimeTProxyPort: cfg.RuntimeTProxyPort,
 		RuntimeSecret:     cfg.RuntimeSecret,
 		BaseConfigPath:    cfg.BaseConfigPath,
+		AppConfigPath:     cfg.AppConfigPath,
 		WebRoot:           cfg.WebRoot,
 	})
 	if err != nil {

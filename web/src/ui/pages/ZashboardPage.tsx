@@ -6,6 +6,12 @@ import { useI18n } from "@/i18n/I18nProvider";
 import type { SystemStatus } from "@/types/api";
 import { Panel } from "@/ui/components/Panel";
 
+type ZashboardWindow = Window & {
+  __graydeckZashboardMask?: MutationObserver;
+};
+
+const settingsLabels = new Set(["设置", "settings"]);
+
 export function ZashboardPage() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
@@ -42,12 +48,18 @@ export function ZashboardPage() {
   });
 
   const status = statusQuery.data;
+  const hideSettings = status?.zashboardHideSettings ?? true;
+
   function formatVersion(value: string, fallback: string) {
     if (!value) {
       return fallback;
     }
 
-    if (value === "installed" || value === "unknown") {
+    if (value === "installed") {
+      return t("common.installed");
+    }
+
+    if (value === "unknown") {
       return t("core.unknown");
     }
 
@@ -61,6 +73,10 @@ export function ZashboardPage() {
 
     if (!status.zashboardReady) {
       return t("zashboard.notReady");
+    }
+
+    if (!status.zashboardLatestVersion) {
+      return t("zashboard.ready");
     }
 
     if (status.zashboardIsLatest) {
@@ -79,32 +95,93 @@ export function ZashboardPage() {
       return "badge danger";
     }
 
-    if (status.zashboardIsLatest) {
+    if (!status.zashboardLatestVersion || status.zashboardIsLatest) {
       return "badge active";
     }
 
     return "badge warning";
   }
 
+  function normalizeText(value: string | null | undefined) {
+    return (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  function hideSettingsNodes(doc: Document) {
+    const candidates = doc.querySelectorAll<HTMLElement>("a, button, [role='button'], [data-route], [data-page], li, span, div");
+
+    for (const element of candidates) {
+      const text = normalizeText(element.textContent);
+      const ariaLabel = normalizeText(element.getAttribute("aria-label"));
+      const href = normalizeText(element.getAttribute("href"));
+      const route = normalizeText(element.getAttribute("data-route") ?? element.getAttribute("data-page"));
+
+      if (
+        !settingsLabels.has(text) &&
+        !settingsLabels.has(ariaLabel) &&
+        !href.includes("settings") &&
+        !route.includes("settings")
+      ) {
+        continue;
+      }
+
+      const target =
+        element.closest<HTMLElement>("a, button, [role='button'], [data-route], [data-page], li") ?? element;
+
+      if (target === doc.body || target === doc.documentElement) {
+        continue;
+      }
+
+      target.style.display = "none";
+    }
+  }
+
   function handleFrameLoad(event: SyntheticEvent<HTMLIFrameElement>) {
     const doc = event.currentTarget.contentDocument;
-    if (!doc || doc.getElementById("graydeck-zashboard-style")) {
+    const frameWindow = event.currentTarget.contentWindow as ZashboardWindow | null;
+    if (!doc || !frameWindow) {
       return;
     }
 
-    const style = doc.createElement("style");
-    style.id = "graydeck-zashboard-style";
-    style.textContent = `
-      a[href*="settings"],
-      button[aria-label*="Settings"],
-      button[aria-label*="settings"],
-      button[aria-label*="设置"],
-      [data-page="settings"],
-      [data-route="settings"] {
-        display: none !important;
-      }
-    `;
-    doc.head?.appendChild(style);
+    const existingStyle = doc.getElementById("graydeck-zashboard-style");
+    if (!hideSettings) {
+      frameWindow.__graydeckZashboardMask?.disconnect();
+      frameWindow.__graydeckZashboardMask = undefined;
+      existingStyle?.remove();
+      return;
+    }
+
+    if (!existingStyle) {
+      const style = doc.createElement("style");
+      style.id = "graydeck-zashboard-style";
+      style.textContent = `
+        a[href*="settings"],
+        button[aria-label*="Settings"],
+        button[aria-label*="settings"],
+        button[aria-label*="设置"],
+        [data-page="settings"],
+        [data-route="settings"] {
+          display: none !important;
+        }
+      `;
+      doc.head?.appendChild(style);
+    }
+
+    hideSettingsNodes(doc);
+
+    if (frameWindow.__graydeckZashboardMask) {
+      return;
+    }
+
+    const observer = new MutationObserver(() => {
+      hideSettingsNodes(doc);
+    });
+    observer.observe(doc.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["aria-label", "href", "data-route", "data-page", "class"],
+    });
+    frameWindow.__graydeckZashboardMask = observer;
   }
 
   const title = status ? (
@@ -148,7 +225,13 @@ export function ZashboardPage() {
               <div className="status-notice status-notice-error">{status.zashboardError}</div>
             ) : null}
             <div className="zashboard-frame-shell">
-              <iframe className="zashboard-iframe" onLoad={handleFrameLoad} src={dashboardUrl} title="Zashboard" />
+              <iframe
+                className="zashboard-iframe"
+                key={hideSettings ? "hide-settings" : "show-settings"}
+                onLoad={handleFrameLoad}
+                src={dashboardUrl}
+                title="Zashboard"
+              />
             </div>
           </div>
         ) : (
@@ -169,6 +252,7 @@ export function ZashboardPage() {
               </div>
               <iframe
                 className="zashboard-iframe zashboard-iframe-fullscreen"
+                key={hideSettings ? "hide-settings-fullscreen" : "show-settings-fullscreen"}
                 onLoad={handleFrameLoad}
                 src={dashboardUrl}
                 title="Zashboard fullscreen"

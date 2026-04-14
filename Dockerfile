@@ -29,6 +29,7 @@ RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=server-builder /out/managerd /usr/local/bin/managerd
 COPY --from=web-builder /workspace/web/dist /opt/graydeck/web
+COPY config /config
 
 ENV GRAYDECK_SECRET=graydeck-secret
 
@@ -39,6 +40,6 @@ EXPOSE 7891/tcp
 EXPOSE 7892/tcp
 EXPOSE 7893/tcp
 EXPOSE 7893/udp
-VOLUME ["/data"]
+VOLUME ["/data", "/config"]
 
 ENTRYPOINT ["/usr/local/bin/managerd"]

@@ -18,6 +18,7 @@ type Config struct {
 	RuntimeTProxyPort string
 	RuntimeSecret     string
 	BaseConfigPath    string
+	AppConfigPath     string
 	WebRoot           string
 }
 
@@ -25,6 +26,7 @@ func LoadConfigFromEnv() Config {
 	listenAddress := ":18080"
 
 	dataDir := defaultDataDir()
+	configDir := defaultConfigDir()
 	webRoot := defaultWebRoot()
 	coreTargetOS := runtime.GOOS
 	coreTargetArch := runtime.GOARCH
@@ -41,7 +43,12 @@ func LoadConfigFromEnv() Config {
 
 	baseConfigPath := os.Getenv("GRAYDECK_BASE_CONFIG")
 	if baseConfigPath == "" {
-		baseConfigPath = filepath.Join(dataDir, "runtime", "base.yaml")
+		baseConfigPath = filepath.Join(configDir, "base.yaml")
+	}
+
+	appConfigPath := os.Getenv("GRAYDECK_APP_CONFIG")
+	if appConfigPath == "" {
+		appConfigPath = filepath.Join(configDir, "graydeck.yaml")
 	}
 
 	return Config{
@@ -56,6 +63,7 @@ func LoadConfigFromEnv() Config {
 		RuntimeTProxyPort: runtimeTProxyPort,
 		RuntimeSecret:     runtimeSecret,
 		BaseConfigPath:    baseConfigPath,
+		AppConfigPath:     appConfigPath,
 		WebRoot:           webRoot,
 	}
 }
@@ -76,4 +84,13 @@ func defaultWebRoot() string {
 	}
 
 	return filepath.Join(".", "web", "dist")
+}
+
+func defaultConfigDir() string {
+	const containerConfigDir = "/config"
+	if info, err := os.Stat(containerConfigDir); err == nil && info.IsDir() {
+		return containerConfigDir
+	}
+
+	return filepath.Join(".", "config")
 }
