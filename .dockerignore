@@ -7,6 +7,9 @@ node_modules
 web/node_modules
 web/.vite
 web/dist
+internal/webui/dist/*
+!internal/webui/dist/.gitignore
+!internal/webui/dist/keep.txt
 tmp
 coverage
 *.log

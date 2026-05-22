@@ -32,11 +32,6 @@ function getPositionalArgs() {
   return values;
 }
 
-function buildTimestampTag(now = new Date()) {
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`;
-}
-
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: "inherit", shell: true });
   if (result.status !== 0) {
@@ -51,12 +46,20 @@ if (!imageRepo) {
   process.exit(1);
 }
 
-const versionTag = getCliOption("DOCKER_IMAGE_TAG") ?? positional[1] ?? buildTimestampTag();
+const versionTag = getCliOption("DOCKER_IMAGE_TAG") ?? positional[1];
+if (!versionTag || !isSemanticVersion(versionTag)) {
+  console.error("Missing semantic version. Pass --DOCKER_IMAGE_TAG=1.0.1 or second positional arg.");
+  process.exit(1);
+}
 const versionRef = `${imageRepo}:${versionTag}`;
 const latestRef = `${imageRepo}:latest`;
 
 console.log(`Building and pushing image: ${versionRef}`);
-run("docker", ["build", "-t", versionRef, "-t", latestRef, "."]);
+run("docker", ["build", "--build-arg", `VERSION=${versionTag}`, "-t", versionRef, "-t", latestRef, "."]);
 run("docker", ["push", versionRef]);
 run("docker", ["push", latestRef]);
 console.log(`Build+push completed: ${versionRef}, ${latestRef}`);
+
+function isSemanticVersion(value) {
+  return /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(value);
+}

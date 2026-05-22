@@ -10,10 +10,14 @@ web/.vite/
 *.test
 coverage/
 dist/
+!internal/webui/dist/
+internal/webui/dist/*
+!internal/webui/dist/.gitignore
+!internal/webui/dist/keep.txt
 tmp/
 *.log
+*.tsbuildinfo
 .gocache/
-dist/
 .history/
 .logs/
 data/

@@ -7,7 +7,7 @@ services:
     container_name: graydeck
     restart: unless-stopped
     ports:
-      - "8080:18080"
+      - "8080:8080"
       - "7890:17890/tcp"
       - "7890:17890/udp"
       - "7891:17891/tcp"

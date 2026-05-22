@@ -77,6 +77,19 @@ external-controller: %s
 secret: %s
 mode: %s
 log-level: %s
+dns:
+  enable: true
+  listen: 0.0.0.0:53
+tun:
+  enable: true
+  stack: system
+  device: mihomo
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+  dns-hijack:
+    - any:53
+    - tcp://any:53
 `, yamlScalar(s.cfg.RuntimeMixedPort), yamlScalar(s.cfg.RuntimeSocksPort), yamlScalar(s.cfg.RuntimeRedirPort), yamlScalar(s.cfg.RuntimeTProxyPort), yamlString("0.0.0.0"), yamlBool("true"), yamlString(s.cfg.ControllerAddr), yamlString(s.cfg.RuntimeSecret), yamlString("rule"), yamlString("info"))) + "\n"
 }
 
@@ -131,9 +144,18 @@ mode: %s
 log-level: %s
 `, yamlScalar(values.mixedPort), yamlScalar(values.socksPort), yamlScalar(values.redirPort), yamlScalar(values.tproxyPort), yamlString(values.bindAddr), yamlBool(values.allowLAN), yamlString(values.controller), yamlString(values.secret), yamlString(values.mode), yamlString(values.logLevel)))
 
-	baseExtraSection := strings.TrimSpace(stripTopLevelKeys(string(baseConfig), managedKeys...))
-	subscriptionSection := strings.TrimSpace(stripTopLevelKeys(string(content), managedKeys...))
+	overrideSection, overrideKeys, err := mergeBaseRuntimeSections(string(baseConfig), string(content), "dns", "tun")
+	if err != nil {
+		return err
+	}
+
+	baseExtraSection := strings.TrimSpace(stripTopLevelKeys(string(baseConfig), append(managedKeys, overrideKeys...)...))
+	subscriptionKeys := append(managedKeys, overrideKeys...)
+	subscriptionSection := strings.TrimSpace(stripTopLevelKeys(string(content), subscriptionKeys...))
 	mergedSections := []string{managedSection}
+	if overrideSection != "" {
+		mergedSections = append(mergedSections, overrideSection)
+	}
 	if baseExtraSection != "" {
 		mergedSections = append(mergedSections, baseExtraSection)
 	}
@@ -213,11 +235,22 @@ func (s *Service) UpdateDefaultRuntimeConfig(values model.DefaultRuntimeConfig) 
 func stripTopLevelKeys(content string, keys ...string) string {
 	lines := strings.Split(content, "\n")
 	filtered := make([]string, 0, len(lines))
+	skipping := false
 
 	for _, line := range lines {
 		if shouldSkipTopLevelLine(line, keys) {
+			skipping = true
 			continue
 		}
+
+		if skipping && isNestedYAMLLine(line) {
+			continue
+		}
+
+		if skipping && isTopLevelContentLine(line) {
+			skipping = false
+		}
+
 		filtered = append(filtered, line)
 	}
 
@@ -225,15 +258,11 @@ func stripTopLevelKeys(content string, keys ...string) string {
 }
 
 func shouldSkipTopLevelLine(line string, keys []string) bool {
-	if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+	if !isTopLevelContentLine(line) {
 		return false
 	}
 
 	trimmed := strings.TrimSpace(line)
-	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-		return false
-	}
-
 	for _, key := range keys {
 		if strings.HasPrefix(trimmed, key+":") {
 			return true
@@ -241,6 +270,16 @@ func shouldSkipTopLevelLine(line string, keys []string) bool {
 	}
 
 	return false
+}
+
+func isNestedYAMLLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
+}
+
+func isTopLevelContentLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return trimmed != "" && !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t")
 }
 
 func yamlString(value string) string {

@@ -3,16 +3,19 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"mihomo-manager/internal/manager"
 	"mihomo-manager/internal/model"
+	"mihomo-manager/internal/webui"
 )
 
 type Router struct {
@@ -367,14 +370,14 @@ func (r *Router) buildClashProxy() http.Handler {
 }
 
 func (r *Router) buildWebHandler() http.Handler {
-	webRoot := strings.TrimSpace(r.service.WebRoot())
-	if webRoot == "" {
+	webFS, err := r.webFileSystem()
+	if err != nil {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "web ui not configured", http.StatusNotFound)
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		})
 	}
 
-	fileServer := http.FileServer(http.Dir(webRoot))
+	fileServer := http.FileServer(webFS)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if strings.HasPrefix(req.URL.Path, "/api/") || strings.HasPrefix(req.URL.Path, "/zashboard-ui") {
@@ -388,13 +391,13 @@ func (r *Router) buildWebHandler() http.Handler {
 		}
 
 		if !r.isAuthenticated(req) {
-			if r.shouldServePublicAsset(webRoot, trimmedPath) {
+			if shouldServePublicAsset(webFS, trimmedPath) {
 				fileServer.ServeHTTP(w, req)
 				return
 			}
 
 			if req.URL.Path == "/login" || req.URL.Path == "/login/" {
-				r.serveWebIndex(w, req, webRoot)
+				serveWebIndex(w, req, webFS)
 				return
 			}
 
@@ -407,17 +410,17 @@ func (r *Router) buildWebHandler() http.Handler {
 			return
 		}
 
-		if info, statErr := os.Stat(filepath.Join(webRoot, filepath.Clean(trimmedPath))); statErr == nil && !info.IsDir() {
+		if info, statErr := statWebFile(webFS, trimmedPath); statErr == nil && !info.IsDir() {
 			fileServer.ServeHTTP(w, req)
 			return
 		}
 
-		if strings.Contains(filepath.Base(trimmedPath), ".") {
+		if strings.Contains(path.Base(trimmedPath), ".") {
 			http.NotFound(w, req)
 			return
 		}
 
-		r.serveWebIndex(w, req, webRoot)
+		serveWebIndex(w, req, webFS)
 	})
 }
 
@@ -448,25 +451,67 @@ func (r *Router) withCORS(next http.Handler) http.Handler {
 	})
 }
 
-func (r *Router) shouldServePublicAsset(webRoot, trimmedPath string) bool {
+func (r *Router) webFileSystem() (http.FileSystem, error) {
+	webRoot := strings.TrimSpace(r.service.WebRoot())
+	if webRoot != "" && fileExists(filepath.Join(webRoot, "index.html")) {
+		return http.Dir(webRoot), nil
+	}
+
+	if webui.Ready() {
+		return webui.FileSystem(), nil
+	}
+
+	return nil, errors.New("web ui not ready")
+}
+
+func shouldServePublicAsset(webFS http.FileSystem, trimmedPath string) bool {
 	if trimmedPath == "" || trimmedPath == "index.html" {
 		return false
 	}
 
-	info, err := os.Stat(filepath.Join(webRoot, filepath.Clean(trimmedPath)))
+	info, err := statWebFile(webFS, trimmedPath)
 	if err != nil || info.IsDir() {
 		return false
 	}
 
-	return strings.Contains(filepath.Base(trimmedPath), ".")
+	return strings.Contains(path.Base(trimmedPath), ".")
 }
 
-func (r *Router) serveWebIndex(w http.ResponseWriter, req *http.Request, webRoot string) {
-	indexPath := filepath.Join(webRoot, "index.html")
-	if _, statErr := os.Stat(indexPath); statErr != nil {
+func serveWebIndex(w http.ResponseWriter, req *http.Request, webFS http.FileSystem) {
+	file, err := webFS.Open("index.html")
+	if err != nil {
 		http.Error(w, "web ui not ready", http.StatusServiceUnavailable)
 		return
 	}
+	defer file.Close()
 
-	http.ServeFile(w, req, indexPath)
+	info, err := file.Stat()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	reader, ok := file.(io.ReadSeeker)
+	if !ok {
+		http.Error(w, "web ui index is not seekable", http.StatusInternalServerError)
+		return
+	}
+
+	http.ServeContent(w, req, "index.html", info.ModTime(), reader)
+}
+
+func statWebFile(webFS http.FileSystem, name string) (os.FileInfo, error) {
+	cleanName := strings.TrimPrefix(path.Clean("/"+name), "/")
+	file, err := webFS.Open(cleanName)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	return file.Stat()
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }

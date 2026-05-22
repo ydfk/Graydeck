@@ -51,6 +51,10 @@ if (!versionTag) {
   console.error("Missing tag. Pass --DOCKER_IMAGE_TAG=<tag> or second positional arg.");
   process.exit(1);
 }
+if (versionTag !== "latest" && !isSemanticVersion(versionTag)) {
+  console.error("Docker image tag must be latest or semantic version, e.g. 1.0.1.");
+  process.exit(1);
+}
 
 const imageRef = `${imageRepo}:${versionTag}`;
 const latestRef = `${imageRepo}:latest`;
@@ -65,3 +69,7 @@ if (versionTag !== "latest") {
 console.log(`Pushing image: ${latestRef}`);
 run("docker", ["push", latestRef]);
 console.log(`Push completed: ${imageRef}, ${latestRef}`);
+
+function isSemanticVersion(value) {
+  return /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(value);
+}

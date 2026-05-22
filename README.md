@@ -45,7 +45,7 @@ npm install -g pnpm
 `config/` 下包含这些内容：
 
 - `config/base.yaml`：基础运行配置，启动时会注入到最终运行配置
-- `config/graydeck.yaml`：Graydeck 服务配置，例如 `auth.username`、`auth.password`、`update.prefer-proxy`、`update.proxy-url`、`zashboard.hide-settings`
+- `config/graydeck.yaml`：Graydeck 服务配置，例如 `server.port`、`auth.username`、`auth.password`、`update.prefer-proxy`、`update.proxy-url`、`zashboard.hide-settings`
 
 `config/base.yaml` 在 Docker 场景下至少要保留这几个基础项：
 
@@ -89,11 +89,13 @@ pnpm run dev:web
 默认地址：
 
 - 前端：`http://localhost:5173`
-- 后端：`http://localhost:18080`
+- 后端：`http://localhost:8080`
 
 默认登录配置在 `config/graydeck.yaml`：
 
 ```yaml
+server:
+  port: 8080
 auth:
   enabled: true
   username: admin
@@ -116,7 +118,8 @@ $env:GRAYDECK_SECRET="graydeck-secret"
 说明：
 
 - `GRAYDECK_SECRET` 用来设置控制面密钥
-- `MGR_LISTEN` 也已固定为 `:18080`，不再通过环境变量覆盖
+- 管理端口通过 `config/graydeck.yaml` 的 `server.port` 配置，默认值为 `8080`
+- 修改 `server.port` 后需要重启 Graydeck 服务
 - `GRAYDECK_DATA_DIR` / `GRAYDECK_WEB_ROOT` / `GRAYDECK_CORE_OS` / `GRAYDECK_CORE_ARCH` / `GRAYDECK_CONTROLLER_ADDR` / `GRAYDECK_MIXED_PORT` 已改为程序内固定策略，不再通过环境变量覆盖
 
 ## 当前行为
@@ -148,6 +151,56 @@ $env:GRAYDECK_SECRET="graydeck-secret"
 
 ## 常用命令
 
+生成单文件可执行程序：
+
+```powershell
+pnpm run build:standalone
+```
+
+指定 Linux 平台：
+
+```powershell
+pnpm run build:standalone -- --target=linux-amd64
+```
+
+也可以拆开指定：
+
+```powershell
+pnpm run build:standalone -- --os=linux --arch=arm64
+```
+
+产物会输出到 `dist/graydeck-<系统>-<架构>`，Windows 目标会自动带 `.exe` 后缀。这个可执行文件已经内置前端管理页，运行时仍会使用当前目录下的 `config/` 和 `data/`。
+
+### Debian 13 服务安装
+
+先生成 Linux 单文件版本：
+
+```powershell
+pnpm run build:standalone -- --target=linux-amd64
+```
+
+把 `graydeck-linux-amd64` 和仓库里的安装脚本放到 Debian 13 后执行：
+
+```bash
+sudo bash ./install-debian-systemd.sh ./graydeck-linux-amd64
+```
+
+在仓库目录中也可以直接执行：
+
+```bash
+sudo bash ./scripts/install-debian-systemd.sh ./dist/graydeck-linux-amd64
+```
+
+脚本只会写入 `/etc/systemd/system/graydeck.service` 并启动服务，不会移动可执行文件，也不会创建用户或修改安装目录。服务会把传入二进制所在目录作为 `WorkingDirectory`，单文件会在该目录下使用 `config/` 和 `data/`。
+
+常用服务命令：
+
+```bash
+sudo systemctl status graydeck.service
+sudo systemctl restart graydeck.service
+sudo journalctl -u graydeck.service -f
+```
+
 后端构建：
 
 ```powershell
@@ -178,6 +231,8 @@ pnpm run check
 pnpm run build
 ```
 
+`pnpm run build` 会先构建前端，再把 `web/dist` 同步到 Go 的嵌入目录，最后编译后端。
+
 ## Docker
 
 仓库已提供：
@@ -205,11 +260,30 @@ Compose 示例还额外映射了常用 mihomo 端口：`7890`、`7891`、`7892`�
 
 镜像内 `mihomo` 默认监听的是 `17890`、`17891`、`17892`、`17893`，Compose 已经把它们映射成宿主机常见端口 `7890`、`7891`、`7892`、`7893`。
 
+Docker 镜像里的 `managerd` 同样内置前端管理页，不需要额外挂载 Web 静态资源目录。
+
 `cap_add: NET_ADMIN` 与 `/dev/net/tun` 设备挂载仅在你需要 TUN/透明代理时才必须；如果只使用普通 HTTP/SOCKS 代理，可移除这两项。
+
+## 版本发布
+
+Graydeck 使用 `1.0.1` 这类语义化版本。正式发布通过 tag 触发，不会在普通提交时发布：
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+GitHub Actions 会为同一个版本同时处理：
+
+- GitHub Release 的 standalone 可执行文件
+- `ghcr.io/<owner>/graydeck:1.0.1`
+- `ghcr.io/<owner>/graydeck:latest`
+
+发布时注入到 Docker 镜像和 standalone 可执行文件内的版本号都使用 tag 去掉 `v` 后的值。
 
 ## DockerHub 镜像发布脚本
 
-支持 3 个脚本：`buil`、`push`、`buildPush`（同时也提供 `docker:*` 同义命令）。
+支持 3 个脚本：`build:docker`、`push:docker`、`buildPush:docker`（同时也提供 `docker:*` 同义命令）。
 
 传参规则：
 
@@ -219,23 +293,23 @@ Compose 示例还额外映射了常用 mihomo 端口：`7890`、`7891`、`7892`�
 设置镜像仓库（示例）：
 
 ```powershell
-pnpm run build:docker -- --DOCKERHUB_REPO=your-user/graydeck
+pnpm run build:docker -- --DOCKERHUB_REPO=your-user/graydeck --DOCKER_IMAGE_TAG=1.0.1
 ```
 
-仅构建（自动按时间生成版本号，如 `202604132146`）：
+仅构建：
 
 ```powershell
-pnpm run buil -- your-user/graydeck
+pnpm run build:docker -- your-user/graydeck 1.0.1
 ```
 
 仅推送指定 tag：
 
 ```powershell
-pnpm run push -- your-user/graydeck 202604132146
+pnpm run push:docker -- your-user/graydeck 1.0.1
 ```
 
-一键构建并推送（自动时间版本 + `latest`）：
+一键构建并推送版本 tag 与 `latest`：
 
 ```powershell
-pnpm run buildPush -- your-user/graydeck
+pnpm run buildPush:docker -- your-user/graydeck 1.0.1
 ```

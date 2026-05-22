@@ -108,6 +108,8 @@ func (s *Service) loadAppSettings() appSettings {
 func defaultAppConfigContent() string {
 	return strings.TrimSpace(`
 # Graydeck 服务配置
+server:
+  port: 8080
 auth:
   enabled: true
   username: admin

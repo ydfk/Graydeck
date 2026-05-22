@@ -17,10 +17,12 @@ WORKDIR /workspace
 COPY go.mod ./
 COPY cmd ./cmd
 COPY internal ./internal
+COPY --from=web-builder /workspace/web/dist ./internal/webui/dist
 
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/managerd ./cmd/managerd
+ARG VERSION=0.0.0-dev
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags "-X mihomo-manager/internal/buildinfo.Version=${VERSION}" -o /out/managerd ./cmd/managerd
 
 FROM alpine:3.21 AS runtime
 WORKDIR /opt/graydeck
@@ -28,12 +30,11 @@ WORKDIR /opt/graydeck
 RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=server-builder /out/managerd /usr/local/bin/managerd
-COPY --from=web-builder /workspace/web/dist /opt/graydeck/web
 COPY config /config
 
 ENV GRAYDECK_SECRET=graydeck-secret
 
-EXPOSE 18080
+EXPOSE 8080
 EXPOSE 17890/tcp
 EXPOSE 17890/udp
 EXPOSE 17891/tcp

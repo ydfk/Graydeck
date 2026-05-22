@@ -15,6 +15,9 @@ type Subscription struct {
 }
 
 type SystemStatus struct {
+	GraydeckVersion        string `json:"graydeckVersion"`
+	GraydeckLatestVersion  string `json:"graydeckLatestVersion"`
+	GraydeckIsLatest       bool   `json:"graydeckIsLatest"`
 	RuntimeStatus          string `json:"runtimeStatus"`
 	RuntimeError           string `json:"runtimeError"`
 	CurrentConfigName      string `json:"currentConfigName"`

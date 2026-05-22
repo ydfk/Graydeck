@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"mihomo-manager/internal/buildinfo"
 	"mihomo-manager/internal/model"
 )
 
@@ -84,6 +85,10 @@ func New(cfg Config) (*Service, error) {
 func (s *Service) bootstrap(ctx context.Context) error {
 	s.appendLog("开始执行启动初始化")
 
+	if err := s.refreshGraydeckMetadata(ctx); err != nil {
+		s.appendLogf("获取 Graydeck 版本失败：%v", err)
+	}
+
 	if err := s.refreshCoreMetadata(ctx); err != nil {
 		s.appendLogf("获取核心版本失败：%v", err)
 		s.setRuntimeStatus("error", fmt.Sprintf("获取核心版本失败：%v", err))
@@ -115,6 +120,10 @@ func (s *Service) bootstrap(ctx context.Context) error {
 
 func (s *Service) RefreshAll(ctx context.Context) error {
 	s.appendLog("开始刷新系统状态")
+
+	if err := s.refreshGraydeckMetadata(ctx); err != nil {
+		s.appendLogf("刷新 Graydeck 版本失败：%v", err)
+	}
 
 	if err := s.refreshCoreMetadata(ctx); err != nil {
 		s.appendLogf("刷新核心版本失败：%v", err)
@@ -780,6 +789,7 @@ func (s *Service) loadInstalledVersions() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.status.GraydeckVersion = buildinfo.Version
 	s.status.CoreVersion = coreVersion
 	s.status.ZashboardVersion = zashboardVersion
 	s.syncInstallStateLocked()
@@ -883,6 +893,7 @@ func (s *Service) syncInstallStateLocked() {
 
 	s.status.CoreIsLatest = sameVersion(s.status.CoreVersion, s.status.CoreLatestVersion)
 	s.status.ZashboardIsLatest = sameVersion(s.status.ZashboardVersion, s.status.ZashboardLatestVersion)
+	s.status.GraydeckIsLatest = sameVersion(s.status.GraydeckVersion, s.status.GraydeckLatestVersion)
 
 	if s.status.ZashboardReady && s.status.ZashboardVersion == "" {
 		if s.status.ZashboardLatestVersion != "" {

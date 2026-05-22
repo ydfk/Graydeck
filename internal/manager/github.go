@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"mihomo-manager/internal/buildinfo"
 	"mihomo-manager/internal/model"
 )
 
@@ -46,6 +47,22 @@ func (s *Service) refreshCoreMetadata(ctx context.Context) error {
 	s.mu.Unlock()
 
 	s.appendLogf("mihomo 核心最新版本：%s", release.TagName)
+	return nil
+}
+
+func (s *Service) refreshGraydeckMetadata(ctx context.Context) error {
+	s.appendLog("开始检查 Graydeck 最新版本")
+	release, err := s.fetchLatestRelease(ctx, buildinfo.RepositoryOwner, buildinfo.RepositoryName)
+	if err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	s.status.GraydeckLatestVersion = release.TagName
+	s.syncInstallStateLocked()
+	s.mu.Unlock()
+
+	s.appendLogf("Graydeck 最新版本：%s", release.TagName)
 	return nil
 }
 

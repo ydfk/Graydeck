@@ -1,4 +1,7 @@
 export type SystemStatus = {
+  graydeckVersion: string;
+  graydeckLatestVersion: string;
+  graydeckIsLatest: boolean;
   runtimeStatus: string;
   runtimeError: string;
   currentConfigName: string;

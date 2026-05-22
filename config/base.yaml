@@ -9,3 +9,16 @@ secret: "graydeck-secret"
 allow-lan: true
 mode: rule
 log-level: info
+dns:
+  enable: true
+  listen: 0.0.0.0:53
+tun:
+  enable: true
+  stack: system
+  device: mihomo
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+  dns-hijack:
+    - any:53
+    - tcp://any:53

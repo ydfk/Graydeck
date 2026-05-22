@@ -240,6 +240,14 @@ export function OverviewPage() {
     return "badge warning";
   }
 
+  function getGraydeckVersionBadgeClass() {
+    if (!systemStatus?.graydeckLatestVersion) {
+      return "badge";
+    }
+
+    return systemStatus.graydeckIsLatest ? "badge active" : "badge warning";
+  }
+
   return (
     <div className="page-grid">
       {actionError ? <div className="status-notice status-notice-error">{actionError}</div> : null}
@@ -256,6 +264,24 @@ export function OverviewPage() {
           <div className="info-table-shell">
             <table className="info-table">
               <tbody>
+                <tr>
+                  <th>{t("graydeck.groupTitle")}</th>
+                  <td>
+                    <div className="table-actions">
+                      <span className="summary-label">{t("graydeck.currentVersion")}</span>
+                      <span className="summary-value-inline">{formatVersion(systemStatus.graydeckVersion, t("core.unknown"))}</span>
+                      <span className="summary-label">{t("graydeck.latestVersion")}</span>
+                      <span className="summary-value-inline">{formatVersion(systemStatus.graydeckLatestVersion, t("core.unknown"))}</span>
+                      <span className={getGraydeckVersionBadgeClass()}>
+                        {systemStatus.graydeckLatestVersion
+                          ? systemStatus.graydeckIsLatest
+                            ? t("graydeck.isLatest")
+                            : t("graydeck.hasUpdate")
+                          : t("core.unknown")}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
                 <tr>
                   <th>{t("system.runtimeStatus")}</th>
                   <td>
