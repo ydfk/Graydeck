@@ -14,7 +14,7 @@ RUN pnpm --filter graydeck-web build
 FROM golang:1.24-alpine AS server-builder
 WORKDIR /workspace
 
-COPY go.mod ./
+COPY go.mod go.sum ./
 COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=web-builder /workspace/web/dist ./internal/webui/dist
