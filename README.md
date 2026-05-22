@@ -1,97 +1,84 @@
 # Graydeck
 
-`Graydeck` 是一个面向 `mihomo` 的轻量管理端，当前已经具备一条真实可运行的基础链路：
+<p align="center">
+  <img src="./web/public/graydeck-logo.svg" alt="Graydeck logo" width="88" />
+</p>
 
-- 首次启动时自动检查并下载最新 `mihomo` 核心
-- 首次启动时自动检查并下载最新 `zashboard` 静态资源
-- 远程订阅配置拉取、状态记录、格式校验、YAML 在线预览
-- 当前启用配置切换与运行状态反馈
-- 核心与 `zashboard` 版本检查、手动升级
-- React + TypeScript + Vite 8 前端
-- Go `air` 热更新开发流程
+<p align="center">
+  面向 <code>mihomo</code> 的轻量配置、更新与面板管理工具。
+</p>
 
-## 环境要求
+`Graydeck` 是一个围绕 `mihomo` 日常使用场景设计的轻量管理端。它把远程订阅配置、核心更新、运行状态和 `Zashboard` 面板收进同一个界面，让部署完成后的配置维护更集中，也尽量减少手动整理核心文件、面板资源和运行配置的工作。
 
-- Go `1.24+`
-- Node.js `22+`
-- `pnpm`
-- `air`
+项目关注的不是重新实现一套代理面板，而是把 `mihomo` 常见的管理链路串起来：
 
-安装 `air`：
+1. 维护多个远程订阅配置，并按需同步、预览和切换。
+2. 在配置应用前生成最终运行配置，并交给 `mihomo` 做校验。
+3. 管理 `mihomo` 核心和 `Zashboard` 资源的安装与更新。
+4. 在 Graydeck 中查看运行状态、日志和同域接入的 `Zashboard` 页面。
 
-```powershell
-go install github.com/air-verse/air@latest
-```
+Graydeck 可以作为 Docker 服务运行，也可以打包为内置前端页面的 standalone 单文件程序。无论采用哪种方式，管理界面和运行数据组织方式都保持一致。
 
-如果本机还没有 `pnpm`，先安装：
+## 项目定位
 
-```powershell
-npm install -g pnpm
-```
+Graydeck 适合希望保留 `mihomo` 配置能力，同时想把日常维护收敛到一个轻量 Web 控制台的场景：
 
-## 目录
+- 以远程订阅为主要配置来源，需要管理多个配置文件
+- 希望在切换配置前先看到同步和校验结果
+- 希望由管理端处理核心与面板资源的下载、更新和状态展示
+- 希望直接在同一入口查看 Graydeck 状态与 `Zashboard` 面板
 
-```text
-.
-├─ cmd/managerd
-├─ config/               # 服务配置与基础运行配置
-├─ internal/
-├─ web/
-├─ data/                 # 运行时数据目录，首次启动后自动生成
-├─ DOCKER_IMAGE_DESIGN.md
-└─ web/DESIGN.md
-```
+Graydeck 不负责替代订阅服务，也不把 `mihomo` 的完整配置能力藏进复杂向导。基础配置仍由 YAML 表达，管理端更专注于订阅、校验、应用和更新这些高频动作。
 
-`config/` 下包含这些内容：
+## 特性
 
-- `config/base.yaml`：基础运行配置，启动时会注入到最终运行配置
-- `config/graydeck.yaml`：Graydeck 服务配置，例如 `server.port`、`auth.username`、`auth.password`、`update.prefer-proxy`、`update.proxy-url`、`zashboard.hide-settings`
+- **订阅配置管理**：支持多配置文件、手动同步、切换、状态记录和 YAML 预览
+- **配置应用保护**：启动或切换前生成最终运行配置，并使用 `mihomo` 校验
+- **更新中心**：自动检查并安装 `mihomo` 核心与 `Zashboard` 资源，也支持指定地址和上传文件
+- **面板整合**：内置 `Zashboard` 页面并通过 Graydeck 同域接入，可按配置屏蔽设置菜单
+- **基础配置注入**：通过 `base.yaml` 管理端口、`dns`、`tun` 等基础运行配置的覆盖与合并
+- **运行可观测性**：提供登录鉴权、运行状态控制、核心日志和 Graydeck 自身版本检查
 
-`config/base.yaml` 在 Docker 场景下至少要保留这几个基础项：
+## 管理流程
 
-- `bind-address: "0.0.0.0"`
-- `allow-lan: true`
+1. 添加远程订阅配置。
+2. Graydeck 拉取订阅并生成最终运行配置。
+3. `mihomo` 校验通过后启动或切换到该配置。
+4. 在控制台管理核心版本、配置状态、日志和 `Zashboard` 面板。
 
-`data/` 下会生成这些内容：
+## 运行方式
 
-- `data/core/`：`mihomo` 核心与版本记录
-- `data/zashboard/`：`zashboard` 静态资源与版本记录
-- `data/subscriptions.json`：配置文件元数据
-- `data/subscriptions/*.yaml`：订阅拉取后的 YAML 预览文件
-- `data/runtime/current.yaml`：当前生效配置
+### Docker
 
-## 启动
+仓库提供 [docker-compose.example.yml](./docker-compose.example.yml) 作为启动模板。默认会挂载：
 
-首次安装依赖：
+- `./config:/config`
+- `./data:/data`
 
-```powershell
-pnpm install
-```
+管理页面默认端口为 `8080`。示例还映射了常用 `mihomo` 代理端口：
 
-启动前后端：
+| 宿主机 | 容器内 | 用途 |
+| --- | --- | --- |
+| `8080` | `8080` | Graydeck Web |
+| `7890` | `17890` | mixed port |
+| `7891` | `17891` | SOCKS |
+| `7892` | `17892` | redir |
+| `7893` | `17893` | tproxy |
 
-```powershell
-pnpm run dev
-```
+示例中保留了 `NET_ADMIN` 和 `/dev/net/tun`。只使用普通 HTTP/SOCKS 代理时可以移除；需要 TUN 或透明代理时保留。
 
-只启动后端：
+### Standalone
 
-```powershell
-pnpm run dev:server
-```
+Release 提供 x86_64 单文件产物：
 
-只启动前端：
+- `graydeck-linux-amd64`
+- `graydeck-windows-amd64.exe`
 
-```powershell
-pnpm run dev:web
-```
+单文件已经内置前端管理页。运行目录中的 `config/` 存放服务与基础运行配置，`data/` 存放核心、面板资源、订阅缓存和运行配置。
 
-默认地址：
+## 配置概览
 
-- 前端：`http://localhost:5173`
-- 后端：`http://localhost:8080`
-
-默认登录配置在 `config/graydeck.yaml`：
+`config/graydeck.yaml` 管理 Graydeck 自身：
 
 ```yaml
 server:
@@ -107,209 +94,20 @@ zashboard:
   hide-settings: true
 ```
 
-启动后，未登录无法查看控制台、日志、`Zashboard` 和后端 API。
+`config/base.yaml` 会参与最终运行配置生成，适合放 Graydeck 需要统一注入的基础项：
 
-## 可用环境变量
+- 代理端口与 `external-controller`
+- `allow-lan`、`mode`、`log-level`
+- `dns`、`tun` 等运行配置
 
-```powershell
-$env:GRAYDECK_SECRET="graydeck-secret"
-```
+对于 `dns` 和 `tun`，`base.yaml` 中声明的字段会覆盖订阅配置里的同字段；未声明的字段会保留订阅原值。列表字段在 `base.yaml` 中出现时，以 `base.yaml` 的列表为准。
 
-说明：
+## 开发
 
-- `GRAYDECK_SECRET` 用来设置控制面密钥
-- 管理端口通过 `config/graydeck.yaml` 的 `server.port` 配置，默认值为 `8080`
-- 修改 `server.port` 后需要重启 Graydeck 服务
-- `GRAYDECK_DATA_DIR` / `GRAYDECK_WEB_ROOT` / `GRAYDECK_CORE_OS` / `GRAYDECK_CORE_ARCH` / `GRAYDECK_CONTROLLER_ADDR` / `GRAYDECK_MIXED_PORT` 已改为程序内固定策略，不再通过环境变量覆盖
+技术栈：
 
-## 当前行为
+- Go 后端
+- React + TypeScript + Vite 管理页
+- 内置 `Zashboard` 静态资源集成
 
-### 核心
-
-- 如果本地没有 `mihomo` 核心，后端启动时会自动拉取最新正式版
-- 自动更新会优先尝试 `config/graydeck.yaml` 里的代理地址，失败后再回退到原始地址
-- 当前核心版本和最新版本会显示在控制台
-- 如果检测到新版本，可以在界面里手动升级
-- 核心安装和升级都支持 3 种来源：系统自动更新、手动指定地址、上传文件
-
-### 配置文件
-
-- 当前以远程订阅为主
-- 每个配置文件都会记录同步状态
-- 常见状态包括：`可用`、`订阅失败`、`格式校验失败`
-- 如果没有可用配置，或者当前配置校验失败，核心不会启动，运行状态里会显示原因
-- 支持 YAML 在线预览
-
-### Zashboard
-
-- 如果本地没有 `zashboard` 资源，后端启动时会自动拉取最新版本
-- 自动更新会优先尝试 `config/graydeck.yaml` 里的代理地址，失败后再回退到原始地址
-- `Zashboard` 页面会显示当前版本、最新版本和升级入口
-- `Zashboard` 安装和升级也支持系统自动更新、手动指定地址、上传文件
-- 页面路由使用 `/zashboard-ui/`
-- `config/graydeck.yaml` 中的 `zashboard.hide-settings` 默认为 `true`
-
-## 常用命令
-
-生成单文件可执行程序：
-
-```powershell
-pnpm run build:standalone
-```
-
-指定 Linux 平台：
-
-```powershell
-pnpm run build:standalone -- --target=linux-amd64
-```
-
-也可以拆开指定：
-
-```powershell
-pnpm run build:standalone -- --os=linux --arch=arm64
-```
-
-产物会输出到 `dist/graydeck-<系统>-<架构>`，Windows 目标会自动带 `.exe` 后缀。这个可执行文件已经内置前端管理页，运行时仍会使用当前目录下的 `config/` 和 `data/`。
-
-### Debian 13 服务安装
-
-先生成 Linux 单文件版本：
-
-```powershell
-pnpm run build:standalone -- --target=linux-amd64
-```
-
-把 `graydeck-linux-amd64` 和仓库里的安装脚本放到 Debian 13 后执行：
-
-```bash
-sudo bash ./install-debian-systemd.sh ./graydeck-linux-amd64
-```
-
-在仓库目录中也可以直接执行：
-
-```bash
-sudo bash ./scripts/install-debian-systemd.sh ./dist/graydeck-linux-amd64
-```
-
-脚本只会写入 `/etc/systemd/system/graydeck.service` 并启动服务，不会移动可执行文件，也不会创建用户或修改安装目录。服务会把传入二进制所在目录作为 `WorkingDirectory`，单文件会在该目录下使用 `config/` 和 `data/`。
-
-常用服务命令：
-
-```bash
-sudo systemctl status graydeck.service
-sudo systemctl restart graydeck.service
-sudo journalctl -u graydeck.service -f
-```
-
-后端构建：
-
-```powershell
-pnpm run build:server
-```
-
-前端类型检查：
-
-```powershell
-pnpm run check:web
-```
-
-前端构建：
-
-```powershell
-pnpm run build:web
-```
-
-前后端一起检查：
-
-```powershell
-pnpm run check
-```
-
-前后端一起构建：
-
-```powershell
-pnpm run build
-```
-
-`pnpm run build` 会先构建前端，再把 `web/dist` 同步到 Go 的嵌入目录，最后编译后端。
-
-## Docker
-
-仓库已提供：
-
-- `Dockerfile`
-- `.dockerignore`
-- `docker-compose.example.yml`
-
-示例（本地 compose 启动）：
-
-```powershell
-docker compose -f docker-compose.example.yml up -d --build
-```
-
-访问地址：
-
-- `http://localhost:8080`
-
-Compose 示例会同时挂载：
-
-- `./config:/config`
-- `./data:/data`
-
-Compose 示例还额外映射了常用 mihomo 端口：`7890`、`7891`、`7892`、`7893`（含必要 UDP），便于直接在宿主机使用代理能力。
-
-镜像内 `mihomo` 默认监听的是 `17890`、`17891`、`17892`、`17893`，Compose 已经把它们映射成宿主机常见端口 `7890`、`7891`、`7892`、`7893`。
-
-Docker 镜像里的 `managerd` 同样内置前端管理页，不需要额外挂载 Web 静态资源目录。
-
-`cap_add: NET_ADMIN` 与 `/dev/net/tun` 设备挂载仅在你需要 TUN/透明代理时才必须；如果只使用普通 HTTP/SOCKS 代理，可移除这两项。
-
-## 版本发布
-
-Graydeck 使用 `1.0.1` 这类语义化版本。正式发布通过 tag 触发，不会在普通提交时发布：
-
-```bash
-git tag v1.0.1
-git push origin v1.0.1
-```
-
-GitHub Actions 会为同一个版本同时处理：
-
-- GitHub Release 的 standalone 可执行文件
-- `ghcr.io/<owner>/graydeck:1.0.1`
-- `ghcr.io/<owner>/graydeck:latest`
-
-发布时注入到 Docker 镜像和 standalone 可执行文件内的版本号都使用 tag 去掉 `v` 后的值。
-
-## DockerHub 镜像发布脚本
-
-支持 3 个脚本：`build:docker`、`push:docker`、`buildPush:docker`（同时也提供 `docker:*` 同义命令）。
-
-传参规则：
-
-- 仅支持命令行参数，不再读取环境变量
-- 未传必需参数时会直接退出，不会执行打包/推送
-
-设置镜像仓库（示例）：
-
-```powershell
-pnpm run build:docker -- --DOCKERHUB_REPO=your-user/graydeck --DOCKER_IMAGE_TAG=1.0.1
-```
-
-仅构建：
-
-```powershell
-pnpm run build:docker -- your-user/graydeck 1.0.1
-```
-
-仅推送指定 tag：
-
-```powershell
-pnpm run push:docker -- your-user/graydeck 1.0.1
-```
-
-一键构建并推送版本 tag 与 `latest`：
-
-```powershell
-pnpm run buildPush:docker -- your-user/graydeck 1.0.1
-```
+项目设计记录见 [DOCKER_IMAGE_DESIGN.md](./DOCKER_IMAGE_DESIGN.md)，前端样式规范见 [web/DESIGN.md](./web/DESIGN.md)。

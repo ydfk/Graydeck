@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-alpine AS web-builder
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web-builder
 WORKDIR /workspace
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -11,7 +11,7 @@ RUN corepack enable && pnpm install --frozen-lockfile
 COPY web ./web
 RUN pnpm --filter graydeck-web build
 
-FROM golang:1.24-alpine AS server-builder
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS server-builder
 WORKDIR /workspace
 
 COPY go.mod go.sum ./
@@ -19,8 +19,8 @@ COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=web-builder /workspace/web/dist ./internal/webui/dist
 
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 ARG VERSION=0.0.0-dev
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags "-X mihomo-manager/internal/buildinfo.Version=${VERSION}" -o /out/managerd ./cmd/managerd
 
