@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { apiPost } from "@/api/client";
 import { useAuthStatus } from "@/api/queries";
 import { useI18n } from "@/i18n/I18nProvider";
+import { BrandTitle } from "@/ui/components/BrandTitle";
 
 export function AppLayout() {
   const { locale, localeLabels, setLocale, t } = useI18n();
@@ -28,9 +29,7 @@ export function AppLayout() {
     <div className="dashboard-shell">
       <header className="topbar">
         <div className="topbar-brand">
-          <div>
-            <h1 className="app-title">{t("layout.title")}</h1>
-          </div>
+          <BrandTitle />
           <p className="app-subtitle">{t("layout.subtitle")}</p>
         </div>
         <div className="topbar-actions">

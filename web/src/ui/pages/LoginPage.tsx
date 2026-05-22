@@ -5,6 +5,7 @@ import { ApiError, apiPost } from "@/api/client";
 import { useAuthStatus } from "@/api/queries";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { AuthStatus } from "@/types/api";
+import { BrandTitle } from "@/ui/components/BrandTitle";
 
 export function LoginPage() {
   const { locale, localeLabels, setLocale, t } = useI18n();
@@ -50,9 +51,7 @@ export function LoginPage() {
     <div className="login-shell">
       <header className="topbar">
         <div className="topbar-brand">
-          <div>
-            <h1 className="app-title">{t("layout.title")}</h1>
-          </div>
+          <BrandTitle />
           <p className="app-subtitle">{t("layout.subtitle")}</p>
         </div>
         <div className="topbar-actions">
