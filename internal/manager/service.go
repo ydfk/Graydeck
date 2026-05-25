@@ -135,10 +135,6 @@ func (s *Service) RefreshAll(ctx context.Context) error {
 		s.setZashboardStatusError(err.Error())
 	}
 
-	if err := s.syncSubscriptions(ctx); err != nil {
-		s.appendLogf("刷新配置文件状态时出现异常：%v", err)
-	}
-
 	if err := s.ensureRuntime(ctx); err != nil {
 		s.appendLogf("刷新运行状态失败：%v", err)
 		return err
@@ -455,19 +451,6 @@ func (s *Service) ControllerURL() string {
 	return "http://" + controllerAddr
 }
 
-func (s *Service) syncSubscriptions(ctx context.Context) error {
-	items := s.Subscriptions()
-	var syncErr error
-
-	for _, item := range items {
-		if _, err := s.syncSubscription(ctx, item.ID); err != nil {
-			syncErr = err
-		}
-	}
-
-	return syncErr
-}
-
 func (s *Service) syncSubscription(ctx context.Context, id string) (model.Subscription, error) {
 	subscription, err := s.findSubscription(id)
 	if err != nil {
@@ -543,14 +526,16 @@ func (s *Service) ensureRuntime(ctx context.Context) error {
 	}
 
 	if enabled.Status != "active" && enabled.Status != "ready" {
-		s.stopCore()
-		s.setCurrentConfigName("")
-		s.appendLogf("当前配置不可用，核心不会启动：%s，%s", enabled.Name, enabled.LastFailureReason)
-		s.setRuntimeStatus("error", enabled.LastFailureReason)
-		return nil
-	}
+		if !fileExists(s.currentConfigPath()) {
+			s.stopCore()
+			s.setCurrentConfigName("")
+			s.appendLogf("当前配置不可用，核心不会启动：%s，%s", enabled.Name, enabled.LastFailureReason)
+			s.setRuntimeStatus("error", enabled.LastFailureReason)
+			return nil
+		}
 
-	if err := s.writeRuntimeConfig(s.subscriptionPreviewPath(enabled.ID), s.currentConfigPath()); err != nil {
+		s.appendLogf("当前配置更新异常，使用已生成的运行配置启动：%s，%s", enabled.Name, enabled.LastFailureReason)
+	} else if err := s.writeRuntimeConfig(s.subscriptionPreviewPath(enabled.ID), s.currentConfigPath()); err != nil {
 		s.stopCore()
 		s.setCurrentConfigName("")
 		s.appendLogf("生成运行配置失败：%s，%v", enabled.Name, err)

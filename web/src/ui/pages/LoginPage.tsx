@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiError, apiPost } from "@/api/client";
@@ -47,6 +47,15 @@ export function LoginPage() {
     }
   }, [authQuery.data?.authenticated, navigate]);
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (loginMutation.isPending || authQuery.isLoading) {
+      return;
+    }
+
+    loginMutation.mutate({ username, password });
+  }
+
   return (
     <div className="login-shell">
       <header className="topbar">
@@ -78,7 +87,7 @@ export function LoginPage() {
 
           {errorMessage ? <div className="status-notice status-notice-error">{errorMessage}</div> : null}
 
-          <div className="login-form">
+          <form className="login-form" onSubmit={handleSubmit}>
             <label className="login-field">
               <span className="summary-label">{t("auth.username")}</span>
               <input
@@ -98,16 +107,15 @@ export function LoginPage() {
                 value={password}
               />
             </label>
-          </div>
 
-          <button
-            className="primary-pill login-submit"
-            disabled={loginMutation.isPending || authQuery.isLoading}
-            onClick={() => loginMutation.mutate({ username, password })}
-            type="button"
-          >
-            {loginMutation.isPending ? t("common.loading") : t("auth.submit")}
-          </button>
+            <button
+              className="primary-pill login-submit"
+              disabled={loginMutation.isPending || authQuery.isLoading}
+              type="submit"
+            >
+              {loginMutation.isPending ? t("common.loading") : t("auth.submit")}
+            </button>
+          </form>
         </section>
       </main>
     </div>
