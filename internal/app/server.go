@@ -26,6 +26,7 @@ func NewServer(cfg Config) (*Server, error) {
 		BaseConfigPath:    cfg.BaseConfigPath,
 		AppConfigPath:     cfg.AppConfigPath,
 		WebRoot:           cfg.WebRoot,
+		DeploymentMode:    cfg.DeploymentMode,
 	})
 	if err != nil {
 		return nil, err

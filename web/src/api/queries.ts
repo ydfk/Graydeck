@@ -20,6 +20,7 @@ export function useSubscriptions() {
   return useQuery({
     queryKey: ['subscriptions'],
     queryFn: () => apiGet<SubscriptionListResponse>('/api/subscriptions'),
+    refetchInterval: 30_000,
   })
 }
 

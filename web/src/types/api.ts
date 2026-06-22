@@ -2,6 +2,7 @@ export type SystemStatus = {
   graydeckVersion: string;
   graydeckLatestVersion: string;
   graydeckIsLatest: boolean;
+  deploymentMode: "docker" | "standalone";
   runtimeStatus: string;
   runtimeError: string;
   currentConfigName: string;
@@ -35,6 +36,7 @@ export type Subscription = {
   autoSync: boolean;
   syncInterval: string;
   lastSyncAt: string;
+  lastSyncTrigger: "auto" | "manual" | "";
   lastSuccess: string;
   lastFailureReason: string;
   status: string;

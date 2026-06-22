@@ -8,6 +8,7 @@ type Subscription struct {
 	AutoSync          bool   `json:"autoSync"`
 	SyncInterval      string `json:"syncInterval"`
 	LastSyncAt        string `json:"lastSyncAt"`
+	LastSyncTrigger   string `json:"lastSyncTrigger"`
 	LastSuccess       string `json:"lastSuccess"`
 	LastFailureReason string `json:"lastFailureReason"`
 	Status            string `json:"status"`
@@ -18,6 +19,7 @@ type SystemStatus struct {
 	GraydeckVersion        string `json:"graydeckVersion"`
 	GraydeckLatestVersion  string `json:"graydeckLatestVersion"`
 	GraydeckIsLatest       bool   `json:"graydeckIsLatest"`
+	DeploymentMode         string `json:"deploymentMode"`
 	RuntimeStatus          string `json:"runtimeStatus"`
 	RuntimeError           string `json:"runtimeError"`
 	CurrentConfigName      string `json:"currentConfigName"`

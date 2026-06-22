@@ -36,8 +36,6 @@ export function ZashboardPage() {
     };
   }, []);
 
-  const dashboardUrl = "/zashboard-ui/";
-
   useEffect(() => {
     localStorage.setItem("setup/api-list", JSON.stringify([dashboardBackend]));
     localStorage.setItem("setup/active-uuid", dashboardBackend.uuid);
@@ -65,6 +63,8 @@ export function ZashboardPage() {
 
   const status = statusQuery.data;
   const hideSettings = status?.zashboardHideSettings ?? true;
+  const dashboardVersion = status?.zashboardVersion || "pending";
+  const dashboardUrl = `/zashboard-ui/?version=${encodeURIComponent(dashboardVersion)}`;
   const actionLabel = status?.zashboardReady ? t("zashboard.updateNow") : `${t("common.install")}${t("update.zashboardTitle")}`;
 
   function formatVersion(value: string, fallback: string) {
@@ -245,7 +245,7 @@ export function ZashboardPage() {
             <div className="zashboard-frame-shell">
               <iframe
                 className="zashboard-iframe"
-                key={hideSettings ? "hide-settings" : "show-settings"}
+                key={`${dashboardVersion}-${hideSettings ? "hide-settings" : "show-settings"}`}
                 onLoad={handleFrameLoad}
                 src={dashboardUrl}
                 title="Zashboard"
@@ -270,7 +270,7 @@ export function ZashboardPage() {
               </div>
               <iframe
                 className="zashboard-iframe zashboard-iframe-fullscreen"
-                key={hideSettings ? "hide-settings-fullscreen" : "show-settings-fullscreen"}
+                key={`${dashboardVersion}-${hideSettings ? "hide-settings-fullscreen" : "show-settings-fullscreen"}`}
                 onLoad={handleFrameLoad}
                 src={dashboardUrl}
                 title="Zashboard fullscreen"

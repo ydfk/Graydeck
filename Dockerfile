@@ -32,7 +32,8 @@ RUN apk add --no-cache ca-certificates tzdata
 COPY --from=server-builder /out/managerd /usr/local/bin/managerd
 COPY config /config
 
-ENV GRAYDECK_SECRET=graydeck-secret
+ENV GRAYDECK_SECRET=graydeck-secret \
+    GRAYDECK_DEPLOYMENT_MODE=docker
 
 EXPOSE 8080
 EXPOSE 17890/tcp

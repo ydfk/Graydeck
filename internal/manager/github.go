@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"mihomo-manager/internal/buildinfo"
@@ -115,7 +116,17 @@ func (s *Service) InstallCoreFromURL(ctx context.Context, rawURL string) (model.
 
 	s.appendLogf("开始通过地址安装 mihomo 核心：%s", trimmedURL)
 	packageName := safeBaseName(trimmedURL, "mihomo-package")
-	packagePath := filepath.Join(s.coreDir(), packageName)
+	tempFile, err := os.CreateTemp(s.coreDir(), ".mihomo-download-*")
+	if err != nil {
+		return model.SystemStatus{}, err
+	}
+	packagePath := tempFile.Name()
+	if err := tempFile.Close(); err != nil {
+		_ = os.Remove(packagePath)
+		return model.SystemStatus{}, err
+	}
+	defer os.Remove(packagePath)
+
 	if err := s.downloadDirectFile(ctx, trimmedURL, packagePath); err != nil {
 		return model.SystemStatus{}, err
 	}
@@ -150,25 +161,39 @@ func (s *Service) installCorePackage(packagePath, packageName, fallbackVersion s
 		return fmt.Errorf("暂不支持直接安装 %s，请使用 .gz、.zip 或可执行文件", filepath.Ext(packageName))
 	}
 
-	// 停止当前核心进程，避免 Linux 下出现 "text file busy" 错误
-	s.stopCore()
+	tempFile, err := os.CreateTemp(s.coreDir(), ".mihomo-install-*")
+	if err != nil {
+		return err
+	}
+	tempPath := tempFile.Name()
+	if err := tempFile.Close(); err != nil {
+		_ = os.Remove(tempPath)
+		return err
+	}
+	defer os.Remove(tempPath)
 
 	switch {
 	case strings.HasSuffix(strings.ToLower(packageName), ".gz"):
-		if err := extractGzip(packagePath, s.coreExecutablePath()); err != nil {
+		if err := extractGzip(packagePath, tempPath); err != nil {
 			return err
 		}
 	case strings.HasSuffix(strings.ToLower(packageName), ".zip"):
-		if err := extractZipExecutable(packagePath, s.coreExecutablePath()); err != nil {
+		if err := extractZipExecutable(packagePath, tempPath); err != nil {
 			return err
 		}
 	default:
-		if err := copyFile(packagePath, s.coreExecutablePath()); err != nil {
+		if err := copyFile(packagePath, tempPath); err != nil {
 			return err
 		}
 	}
 
-	if err := os.Chmod(s.coreExecutablePath(), 0o755); err != nil {
+	if err := os.Chmod(tempPath, 0o755); err != nil {
+		return err
+	}
+
+	// 先完整准备新文件，再停进程并原子替换，避免改写正在执行的 inode。
+	s.stopCore()
+	if err := replaceExecutable(tempPath, s.coreExecutablePath()); err != nil {
 		return err
 	}
 
@@ -188,6 +213,24 @@ func (s *Service) installCorePackage(packagePath, packageName, fallbackVersion s
 
 	s.appendLogf("mihomo 核心安装完成，当前版本：%s", version)
 	return os.WriteFile(filepath.Join(s.coreDir(), "version.txt"), []byte(version+"\n"), 0o644)
+}
+
+func replaceExecutable(sourcePath, targetPath string) error {
+	if runtime.GOOS == "windows" {
+		if err := os.Remove(targetPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+
+	if err := os.Rename(sourcePath, targetPath); err == nil {
+		return nil
+	}
+
+	if err := os.Remove(targetPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	return os.Rename(sourcePath, targetPath)
 }
 
 func (s *Service) refreshZashboardMetadata(ctx context.Context) error {

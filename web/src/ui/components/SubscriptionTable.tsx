@@ -24,17 +24,6 @@ type SubscriptionTableProps = {
   onHideCreateForm: () => void
 }
 
-const syncIntervalOptions = [
-  { value: 'disabled', label: 'sync.disabled' },
-  { value: '5m', label: 'sync.every5m' },
-  { value: '10m', label: 'sync.every10m' },
-  { value: '30m', label: 'sync.every30m' },
-  { value: '1h', label: 'sync.every1h' },
-  { value: '4h', label: 'sync.every4h' },
-  { value: '12h', label: 'sync.every12h' },
-  { value: '24h', label: 'sync.every24h' },
-]
-
 const emptyCreateForm: EditableFields = {
   name: '',
   url: '',
@@ -119,8 +108,19 @@ export function SubscriptionTable({
   }
 
   function formatInterval(value: string) {
-    const option = syncIntervalOptions.find((o) => o.value === value)
-    return option ? t(option.label as 'sync.disabled') : value
+    return value === 'disabled' ? t('sync.disabled') : value
+  }
+
+  function formatSyncTrigger(value: Subscription['lastSyncTrigger']) {
+    if (value === 'auto') {
+      return t('sync.triggerAuto')
+    }
+
+    if (value === 'manual') {
+      return t('sync.triggerManual')
+    }
+
+    return t('common.empty')
   }
 
   return (
@@ -143,17 +143,13 @@ export function SubscriptionTable({
               placeholder={t('config.add.url')}
               value={createForm.url}
             />
-            <select
+            <input
               className="table-input"
               onChange={(event) => updateCreateForm('syncInterval', event.target.value)}
+              placeholder={t('config.syncIntervalPlaceholder')}
+              title={t('config.syncIntervalHint')}
               value={createForm.syncInterval}
-            >
-              {syncIntervalOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {t(opt.label as 'sync.disabled')}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div className="table-actions">
             <button className="primary-pill table-action-button" disabled={creating} onClick={() => onCreate(createForm)} type="button">
@@ -179,6 +175,7 @@ export function SubscriptionTable({
               <th>{t('config.name')}</th>
               <th>{t('config.url')}</th>
               <th>{t('config.syncInterval')}</th>
+              <th>{t('config.lastAttempt')}</th>
               <th>{t('config.lastSuccess')}</th>
               <th>{t('config.status')}</th>
               <th>{t('config.error')}</th>
@@ -188,7 +185,7 @@ export function SubscriptionTable({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td className="table-empty" colSpan={7}>
+                <td className="table-empty" colSpan={8}>
                   {t('common.none')}
                 </td>
               </tr>
@@ -219,20 +216,22 @@ export function SubscriptionTable({
                 </td>
                 <td>
                   {editingId === subscription.id ? (
-                    <select
+                    <input
                       className="table-input table-input-compact"
                       onChange={(event) => updateRow(subscription.id, 'syncInterval', event.target.value)}
+                      placeholder={t('config.syncIntervalPlaceholder')}
+                      title={t('config.syncIntervalHint')}
                       value={subscription.syncInterval}
-                    >
-                      {syncIntervalOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {t(opt.label as 'sync.disabled')}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   ) : (
                     <div className="table-primary">{formatInterval(subscription.syncInterval)}</div>
                   )}
+                </td>
+                <td>
+                  <div className="cell-stack">
+                    <span>{subscription.lastSyncAt || t('common.empty')}</span>
+                    <span className="table-secondary">{formatSyncTrigger(subscription.lastSyncTrigger)}</span>
+                  </div>
                 </td>
                 <td>{subscription.lastSuccess || t('common.empty')}</td>
                 <td>

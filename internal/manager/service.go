@@ -32,17 +32,20 @@ type Config struct {
 	BaseConfigPath    string
 	AppConfigPath     string
 	WebRoot           string
+	DeploymentMode    string
 }
 
 type Service struct {
-	mu            sync.RWMutex
-	cfg           Config
-	httpClient    *http.Client
-	status        model.SystemStatus
-	subscriptions []model.Subscription
-	coreCmd       *exec.Cmd
-	logs          []model.LogEntry
-	syncStopCh    chan struct{}
+	mu                 sync.RWMutex
+	cfg                Config
+	httpClient         *http.Client
+	status             model.SystemStatus
+	subscriptions      []model.Subscription
+	coreCmd            *exec.Cmd
+	coreDone           chan struct{}
+	logs               []model.LogEntry
+	syncStopCh         chan struct{}
+	subscriptionSyncMu sync.Mutex
 }
 
 func New(cfg Config) (*Service, error) {
@@ -180,12 +183,17 @@ func (s *Service) Subscriptions() []model.Subscription {
 }
 
 func (s *Service) CreateSubscription(ctx context.Context, name, rawURL, syncInterval string) (model.Subscription, error) {
+	interval, err := validateSyncInterval(syncInterval)
+	if err != nil {
+		return model.Subscription{}, err
+	}
+
 	subscription := model.Subscription{
 		ID:           fmt.Sprintf("cfg-%d", time.Now().UnixNano()),
 		Name:         strings.TrimSpace(name),
 		URL:          strings.TrimSpace(rawURL),
-		SyncInterval: strings.TrimSpace(syncInterval),
-		AutoSync:     true,
+		SyncInterval: interval,
+		AutoSync:     interval != "disabled",
 		Status:       "pending",
 	}
 
@@ -213,7 +221,17 @@ func (s *Service) CreateSubscription(ctx context.Context, name, rawURL, syncInte
 }
 
 func (s *Service) UpdateSubscription(ctx context.Context, id, name, rawURL, syncInterval string) (model.Subscription, error) {
-	s.appendLogf("开始保存配置文件：%s", strings.TrimSpace(name))
+	nextName := strings.TrimSpace(name)
+	nextURL := strings.TrimSpace(rawURL)
+	nextInterval, err := validateSyncInterval(syncInterval)
+	if err != nil {
+		return model.Subscription{}, err
+	}
+	if nextName == "" || nextURL == "" {
+		return model.Subscription{}, errors.New("名称和地址不能为空")
+	}
+
+	s.appendLogf("开始保存配置文件：%s", nextName)
 	s.mu.Lock()
 	found := false
 	wasEnabled := false
@@ -224,17 +242,13 @@ func (s *Service) UpdateSubscription(ctx context.Context, id, name, rawURL, sync
 			continue
 		}
 
-		nextURL := strings.TrimSpace(rawURL)
 		urlChanged := item.URL != nextURL
 		wasEnabled = item.Enabled
 
-		item.Name = strings.TrimSpace(name)
+		item.Name = nextName
 		item.URL = nextURL
-		item.SyncInterval = strings.TrimSpace(syncInterval)
-		if item.Name == "" || item.URL == "" || item.SyncInterval == "" {
-			s.mu.Unlock()
-			return model.Subscription{}, errors.New("名称、地址和同步频率不能为空")
-		}
+		item.SyncInterval = nextInterval
+		item.AutoSync = nextInterval != "disabled"
 
 		if urlChanged {
 			item.Status = "pending"
@@ -443,6 +457,13 @@ func (s *Service) ControllerURL() string {
 }
 
 func (s *Service) syncSubscription(ctx context.Context, id string) (model.Subscription, error) {
+	return s.syncSubscriptionWithTrigger(ctx, id, "manual")
+}
+
+func (s *Service) syncSubscriptionWithTrigger(ctx context.Context, id, trigger string) (model.Subscription, error) {
+	s.subscriptionSyncMu.Lock()
+	defer s.subscriptionSyncMu.Unlock()
+
 	subscription, err := s.findSubscription(id)
 	if err != nil {
 		return model.Subscription{}, err
@@ -452,36 +473,38 @@ func (s *Service) syncSubscription(ctx context.Context, id string) (model.Subscr
 
 	if subscription.URL == "" {
 		s.appendLogf("更新配置文件失败：%s，订阅地址为空", subscription.Name)
+		s.updateSubscriptionStatus(id, "fetch_failed", "配置文件地址不能为空", false, trigger)
 		return model.Subscription{}, errors.New("配置文件地址不能为空")
 	}
 
 	content, err := s.fetchText(ctx, subscription.URL)
 	if err != nil {
 		s.appendLogf("拉取配置文件失败：%s，%v", subscription.Name, err)
-		s.updateSubscriptionStatus(id, "fetch_failed", fmt.Sprintf("订阅拉取失败：%v", err), false)
+		s.updateSubscriptionStatus(id, "fetch_failed", fmt.Sprintf("订阅拉取失败：%v", err), false, trigger)
 		return model.Subscription{}, err
 	}
 
 	if err := os.WriteFile(s.subscriptionPreviewPath(id), []byte(content), 0o644); err != nil {
 		s.appendLogf("写入配置预览失败：%s，%v", subscription.Name, err)
+		s.updateSubscriptionStatus(id, "validation_failed", fmt.Sprintf("写入配置预览失败：%v", err), false, trigger)
 		return model.Subscription{}, err
 	}
 
 	validatePath, cleanup, err := s.buildValidationConfig(id)
 	if err != nil {
 		s.appendLogf("生成校验配置失败：%s，%v", subscription.Name, err)
-		s.updateSubscriptionStatus(id, "validation_failed", fmt.Sprintf("生成运行配置失败：%v", err), true)
+		s.updateSubscriptionStatus(id, "validation_failed", fmt.Sprintf("生成运行配置失败：%v", err), true, trigger)
 		return model.Subscription{}, err
 	}
 	defer cleanup()
 
 	if err := s.validateConfigFile(validatePath); err != nil {
 		s.appendLogf("配置校验失败：%s，%v", subscription.Name, err)
-		s.updateSubscriptionStatus(id, "validation_failed", err.Error(), true)
+		s.updateSubscriptionStatus(id, "validation_failed", err.Error(), true, trigger)
 		return model.Subscription{}, err
 	}
 
-	s.updateSubscriptionStatus(id, "ready", "", true)
+	s.updateSubscriptionStatus(id, "ready", "", true, trigger)
 	updated, err := s.findSubscription(id)
 	if err != nil {
 		return model.Subscription{}, err
@@ -563,8 +586,10 @@ func (s *Service) ensureRuntime(ctx context.Context) error {
 		return err
 	}
 
+	done := make(chan struct{})
 	s.mu.Lock()
 	s.coreCmd = command
+	s.coreDone = done
 	s.status.RuntimeStatus = "running"
 	s.status.RuntimeError = ""
 	s.status.CurrentConfigName = enabled.Name
@@ -573,12 +598,13 @@ func (s *Service) ensureRuntime(ctx context.Context) error {
 	s.appendLog(fmt.Sprintf("核心已启动，当前配置：%s", enabled.Name))
 	go s.captureLogs(stdout)
 	go s.captureLogs(stderr)
-	go s.waitCore(command)
+	go s.waitCore(command, done)
 	return nil
 }
 
-func (s *Service) waitCore(command *exec.Cmd) {
+func (s *Service) waitCore(command *exec.Cmd, done chan struct{}) {
 	err := command.Wait()
+	close(done)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -588,6 +614,7 @@ func (s *Service) waitCore(command *exec.Cmd) {
 	}
 
 	s.coreCmd = nil
+	s.coreDone = nil
 
 	if err != nil {
 		s.status.RuntimeStatus = "error"
@@ -602,17 +629,25 @@ func (s *Service) waitCore(command *exec.Cmd) {
 }
 
 func (s *Service) stopCore() {
-	s.mu.Lock()
+	s.mu.RLock()
 	command := s.coreCmd
-	s.coreCmd = nil
-	s.mu.Unlock()
+	done := s.coreDone
+	s.mu.RUnlock()
 
 	if command == nil || command.Process == nil {
 		return
 	}
 
 	_ = command.Process.Kill()
-	_, _ = command.Process.Wait()
+	if done == nil {
+		return
+	}
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		s.appendLog("等待 mihomo 核心进程退出超时")
+	}
 }
 
 func (s *Service) captureLogs(reader io.Reader) {
@@ -647,7 +682,7 @@ func (s *Service) validateConfigFile(path string) error {
 	return nil
 }
 
-func (s *Service) updateSubscriptionStatus(id, status, reason string, previewAvailable bool) {
+func (s *Service) updateSubscriptionStatus(id, status, reason string, previewAvailable bool, trigger string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -662,6 +697,7 @@ func (s *Service) updateSubscriptionStatus(id, status, reason string, previewAva
 		item.Status = status
 		item.PreviewAvailable = previewAvailable
 		item.LastSyncAt = now
+		item.LastSyncTrigger = trigger
 		item.LastFailureReason = reason
 		if reason == "" {
 			item.LastSuccess = now
@@ -716,6 +752,10 @@ func (s *Service) loadSubscriptions() error {
 	if err := json.Unmarshal(data, &items); err != nil {
 		return err
 	}
+	for index := range items {
+		interval, intervalErr := parseInterval(items[index].SyncInterval)
+		items[index].AutoSync = intervalErr == nil && interval > 0
+	}
 
 	s.mu.Lock()
 	s.subscriptions = items
@@ -766,6 +806,10 @@ func (s *Service) loadInstalledVersions() {
 	defer s.mu.Unlock()
 
 	s.status.GraydeckVersion = buildinfo.Version
+	s.status.DeploymentMode = s.cfg.DeploymentMode
+	if s.status.DeploymentMode == "" {
+		s.status.DeploymentMode = "standalone"
+	}
 	s.status.CoreVersion = coreVersion
 	s.status.ZashboardVersion = zashboardVersion
 	s.syncInstallStateLocked()
@@ -861,100 +905,6 @@ func (s *Service) appendLog(message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.logs = appendLogEntry(s.logs, message)
-}
-
-func (s *Service) autoSyncLoop() {
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-s.syncStopCh:
-			return
-		case <-ticker.C:
-			s.tickAutoSync()
-		}
-	}
-}
-
-func (s *Service) tickAutoSync() {
-	s.mu.RLock()
-	candidates := make([]model.Subscription, len(s.subscriptions))
-	copy(candidates, s.subscriptions)
-	s.mu.RUnlock()
-
-	for _, sub := range candidates {
-		if sub.SyncInterval == "" {
-			continue
-		}
-
-		interval, err := parseInterval(sub.SyncInterval)
-		if err != nil {
-			continue
-		}
-
-		if interval <= 0 {
-			continue
-		}
-
-		if sub.LastSyncAt == "" {
-			s.syncIfDue(sub, interval)
-			continue
-		}
-
-		lastSync, err := time.ParseInLocation("2006-01-02 15:04:05", sub.LastSyncAt, time.Local)
-		if err != nil {
-			s.syncIfDue(sub, interval)
-			continue
-		}
-
-		if time.Since(lastSync) >= interval {
-			s.syncIfDue(sub, interval)
-		}
-	}
-}
-
-func (s *Service) syncIfDue(sub model.Subscription, _ time.Duration) {
-	s.appendLogf("自动同步配置文件：%s", sub.Name)
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-
-	if _, err := s.SyncSubscription(ctx, sub.ID); err != nil {
-		s.appendLogf("自动同步失败：%s，%v", sub.Name, err)
-	}
-}
-
-func parseInterval(raw string) (time.Duration, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return 0, nil
-	}
-
-	// 支持常见的 cron 简化格式
-	switch raw {
-	case "disabled", "0", "off":
-		return 0, nil
-	}
-
-	// 支持 Go duration 格式以及常见的简写映射
-	mapping := map[string]time.Duration{
-		"5m":   5 * time.Minute,
-		"10m":  10 * time.Minute,
-		"30m":  30 * time.Minute,
-		"1h":   1 * time.Hour,
-		"2h":   2 * time.Hour,
-		"4h":   4 * time.Hour,
-		"6h":   6 * time.Hour,
-		"12h":  12 * time.Hour,
-		"24h":  24 * time.Hour,
-		"48h":  48 * time.Hour,
-	}
-
-	if d, ok := mapping[raw]; ok {
-		return d, nil
-	}
-
-	return time.ParseDuration(raw)
 }
 
 func (s *Service) syncInstallStateLocked() {

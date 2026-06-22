@@ -22,6 +22,7 @@ type Config struct {
 	BaseConfigPath    string
 	AppConfigPath     string
 	WebRoot           string
+	DeploymentMode    string
 }
 
 func LoadConfigFromEnv() Config {
@@ -65,7 +66,16 @@ func LoadConfigFromEnv() Config {
 		BaseConfigPath:    baseConfigPath,
 		AppConfigPath:     appConfigPath,
 		WebRoot:           webRoot,
+		DeploymentMode:    deploymentMode(),
 	}
+}
+
+func deploymentMode() string {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("GRAYDECK_DEPLOYMENT_MODE")), "docker") {
+		return "docker"
+	}
+
+	return "standalone"
 }
 
 func loadListenAddress(appConfigPath string) string {

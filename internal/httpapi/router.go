@@ -320,6 +320,8 @@ func (r *Router) buildZashboardHandler() http.Handler {
 			return
 		}
 
+		w.Header().Set("Cache-Control", "no-store, max-age=0")
+		w.Header().Set("Pragma", "no-cache")
 		http.StripPrefix("/zashboard-ui/", http.FileServer(http.Dir(root))).ServeHTTP(w, req)
 	})
 }

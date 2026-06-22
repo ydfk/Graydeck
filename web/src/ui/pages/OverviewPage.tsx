@@ -279,6 +279,9 @@ export function OverviewPage() {
                             : t("graydeck.hasUpdate")
                           : t("core.unknown")}
                       </span>
+                      {systemStatus.deploymentMode === "docker" && systemStatus.graydeckLatestVersion && !systemStatus.graydeckIsLatest ? (
+                        <span className="table-secondary">{t("graydeck.dockerUpdateHint")}</span>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
