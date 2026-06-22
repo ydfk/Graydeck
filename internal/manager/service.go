@@ -204,18 +204,6 @@ func (s *Service) CreateSubscription(ctx context.Context, name, rawURL, syncInte
 		return model.Subscription{}, err
 	}
 
-	if _, err := s.syncSubscription(ctx, subscription.ID); err != nil {
-		s.appendLogf("新增配置文件后首次更新失败：%s，%v", subscription.Name, err)
-		return model.Subscription{}, err
-	}
-
-	if shouldEnable {
-		if _, err := s.ActivateSubscription(ctx, subscription.ID); err != nil {
-			s.appendLogf("新增配置文件后自动启用失败：%s，%v", subscription.Name, err)
-			return model.Subscription{}, err
-		}
-	}
-
 	s.appendLogf("新增配置文件完成：%s", subscription.Name)
 	return s.findSubscription(subscription.ID)
 }
@@ -224,6 +212,7 @@ func (s *Service) UpdateSubscription(ctx context.Context, id, name, rawURL, sync
 	s.appendLogf("开始保存配置文件：%s", strings.TrimSpace(name))
 	s.mu.Lock()
 	found := false
+	wasEnabled := false
 
 	for index := range s.subscriptions {
 		item := &s.subscriptions[index]
@@ -231,15 +220,22 @@ func (s *Service) UpdateSubscription(ctx context.Context, id, name, rawURL, sync
 			continue
 		}
 
-		item.Name = strings.TrimSpace(name)
-		item.URL = strings.TrimSpace(rawURL)
-		item.SyncInterval = strings.TrimSpace(syncInterval)
-		item.Status = "pending"
-		item.LastFailureReason = ""
+		nextURL := strings.TrimSpace(rawURL)
+		urlChanged := item.URL != nextURL
+		wasEnabled = item.Enabled
 
+		item.Name = strings.TrimSpace(name)
+		item.URL = nextURL
+		item.SyncInterval = strings.TrimSpace(syncInterval)
 		if item.Name == "" || item.URL == "" || item.SyncInterval == "" {
 			s.mu.Unlock()
 			return model.Subscription{}, errors.New("名称、地址和同步频率不能为空")
+		}
+
+		if urlChanged {
+			item.Status = "pending"
+			item.LastFailureReason = ""
+			item.PreviewAvailable = false
 		}
 
 		found = true
@@ -258,21 +254,13 @@ func (s *Service) UpdateSubscription(ctx context.Context, id, name, rawURL, sync
 	}
 	s.mu.Unlock()
 
-	if _, err := s.syncSubscription(ctx, id); err != nil {
-		s.appendLogf("保存配置文件后更新失败：%s，%v", strings.TrimSpace(name), err)
-		return model.Subscription{}, err
-	}
-
 	subscription, err := s.findSubscription(id)
 	if err != nil {
 		return model.Subscription{}, err
 	}
 
-	if subscription.Enabled {
-		if err := s.ensureRuntime(ctx); err != nil {
-			s.appendLogf("保存配置文件后应用失败：%s，%v", subscription.Name, err)
-			return model.Subscription{}, err
-		}
+	if wasEnabled {
+		s.setCurrentConfigName(subscription.Name)
 	}
 
 	s.appendLogf("保存配置文件完成：%s", subscription.Name)
@@ -283,15 +271,14 @@ func (s *Service) ActivateSubscription(ctx context.Context, id string) (model.Su
 	target, _ := s.findSubscription(id)
 	s.appendLogf("开始切换当前配置：%s", target.Name)
 
-	subscription, err := s.syncSubscription(ctx, id)
+	subscription, err := s.findSubscription(id)
 	if err != nil {
-		s.appendLogf("切换配置前更新失败：%s，%v", target.Name, err)
 		return model.Subscription{}, err
 	}
 
 	if subscription.Status != "ready" && subscription.Status != "active" {
 		s.appendLogf("切换配置失败：%s 当前状态不可用", subscription.Name)
-		return model.Subscription{}, errors.New("当前配置文件不可用，无法切换")
+		return model.Subscription{}, errors.New("当前配置文件不可用，请先手动更新配置")
 	}
 
 	s.mu.Lock()
