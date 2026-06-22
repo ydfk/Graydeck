@@ -42,6 +42,7 @@ type Service struct {
 	subscriptions []model.Subscription
 	coreCmd       *exec.Cmd
 	logs          []model.LogEntry
+	syncStopCh    chan struct{}
 }
 
 func New(cfg Config) (*Service, error) {
@@ -50,6 +51,7 @@ func New(cfg Config) (*Service, error) {
 		httpClient: &http.Client{
 			Timeout: 90 * time.Second,
 		},
+		syncStopCh: make(chan struct{}),
 	}
 
 	if err := service.ensureLayout(); err != nil {
@@ -78,6 +80,8 @@ func New(cfg Config) (*Service, error) {
 	if err := service.bootstrap(context.Background()); err != nil {
 		service.setRuntimeStatus("error", err.Error())
 	}
+
+	go service.autoSyncLoop()
 
 	return service, nil
 }
@@ -857,6 +861,100 @@ func (s *Service) appendLog(message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.logs = appendLogEntry(s.logs, message)
+}
+
+func (s *Service) autoSyncLoop() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.syncStopCh:
+			return
+		case <-ticker.C:
+			s.tickAutoSync()
+		}
+	}
+}
+
+func (s *Service) tickAutoSync() {
+	s.mu.RLock()
+	candidates := make([]model.Subscription, len(s.subscriptions))
+	copy(candidates, s.subscriptions)
+	s.mu.RUnlock()
+
+	for _, sub := range candidates {
+		if sub.SyncInterval == "" {
+			continue
+		}
+
+		interval, err := parseInterval(sub.SyncInterval)
+		if err != nil {
+			continue
+		}
+
+		if interval <= 0 {
+			continue
+		}
+
+		if sub.LastSyncAt == "" {
+			s.syncIfDue(sub, interval)
+			continue
+		}
+
+		lastSync, err := time.ParseInLocation("2006-01-02 15:04:05", sub.LastSyncAt, time.Local)
+		if err != nil {
+			s.syncIfDue(sub, interval)
+			continue
+		}
+
+		if time.Since(lastSync) >= interval {
+			s.syncIfDue(sub, interval)
+		}
+	}
+}
+
+func (s *Service) syncIfDue(sub model.Subscription, _ time.Duration) {
+	s.appendLogf("自动同步配置文件：%s", sub.Name)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	if _, err := s.SyncSubscription(ctx, sub.ID); err != nil {
+		s.appendLogf("自动同步失败：%s，%v", sub.Name, err)
+	}
+}
+
+func parseInterval(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+
+	// 支持常见的 cron 简化格式
+	switch raw {
+	case "disabled", "0", "off":
+		return 0, nil
+	}
+
+	// 支持 Go duration 格式以及常见的简写映射
+	mapping := map[string]time.Duration{
+		"5m":   5 * time.Minute,
+		"10m":  10 * time.Minute,
+		"30m":  30 * time.Minute,
+		"1h":   1 * time.Hour,
+		"2h":   2 * time.Hour,
+		"4h":   4 * time.Hour,
+		"6h":   6 * time.Hour,
+		"12h":  12 * time.Hour,
+		"24h":  24 * time.Hour,
+		"48h":  48 * time.Hour,
+	}
+
+	if d, ok := mapping[raw]; ok {
+		return d, nil
+	}
+
+	return time.ParseDuration(raw)
 }
 
 func (s *Service) syncInstallStateLocked() {

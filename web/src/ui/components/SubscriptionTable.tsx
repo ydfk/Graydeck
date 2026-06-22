@@ -24,6 +24,17 @@ type SubscriptionTableProps = {
   onHideCreateForm: () => void
 }
 
+const syncIntervalOptions = [
+  { value: 'disabled', label: 'sync.disabled' },
+  { value: '5m', label: 'sync.every5m' },
+  { value: '10m', label: 'sync.every10m' },
+  { value: '30m', label: 'sync.every30m' },
+  { value: '1h', label: 'sync.every1h' },
+  { value: '4h', label: 'sync.every4h' },
+  { value: '12h', label: 'sync.every12h' },
+  { value: '24h', label: 'sync.every24h' },
+]
+
 const emptyCreateForm: EditableFields = {
   name: '',
   url: '',
@@ -107,6 +118,11 @@ export function SubscriptionTable({
     return 'badge'
   }
 
+  function formatInterval(value: string) {
+    const option = syncIntervalOptions.find((o) => o.value === value)
+    return option ? t(option.label as 'sync.disabled') : value
+  }
+
   return (
     <div className="table-stack">
       {(switchingId || savingId || syncingId || previewingId || creating) && (
@@ -127,12 +143,17 @@ export function SubscriptionTable({
               placeholder={t('config.add.url')}
               value={createForm.url}
             />
-            <input
+            <select
               className="table-input"
               onChange={(event) => updateCreateForm('syncInterval', event.target.value)}
-              placeholder={t('config.add.syncInterval')}
               value={createForm.syncInterval}
-            />
+            >
+              {syncIntervalOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {t(opt.label as 'sync.disabled')}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="table-actions">
             <button className="primary-pill table-action-button" disabled={creating} onClick={() => onCreate(createForm)} type="button">
@@ -198,13 +219,19 @@ export function SubscriptionTable({
                 </td>
                 <td>
                   {editingId === subscription.id ? (
-                    <input
+                    <select
                       className="table-input table-input-compact"
                       onChange={(event) => updateRow(subscription.id, 'syncInterval', event.target.value)}
                       value={subscription.syncInterval}
-                    />
+                    >
+                      {syncIntervalOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {t(opt.label as 'sync.disabled')}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
-                    <div className="table-primary">{subscription.syncInterval}</div>
+                    <div className="table-primary">{formatInterval(subscription.syncInterval)}</div>
                   )}
                 </td>
                 <td>{subscription.lastSuccess || t('common.empty')}</td>

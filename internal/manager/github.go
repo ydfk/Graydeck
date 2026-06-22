@@ -150,6 +150,9 @@ func (s *Service) installCorePackage(packagePath, packageName, fallbackVersion s
 		return fmt.Errorf("暂不支持直接安装 %s，请使用 .gz、.zip 或可执行文件", filepath.Ext(packageName))
 	}
 
+	// 停止当前核心进程，避免 Linux 下出现 "text file busy" 错误
+	s.stopCore()
+
 	switch {
 	case strings.HasSuffix(strings.ToLower(packageName), ".gz"):
 		if err := extractGzip(packagePath, s.coreExecutablePath()); err != nil {

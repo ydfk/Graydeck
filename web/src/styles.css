@@ -450,6 +450,11 @@ a:focus-visible {
   box-shadow: var(--shadow-soft);
 }
 
+select.table-input {
+  cursor: pointer;
+  appearance: auto;
+}
+
 .table-input-compact {
   min-width: 88px;
 }
@@ -462,6 +467,45 @@ a:focus-visible {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.update-dialog-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.update-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.update-dialog-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.update-dialog-desc {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.88rem;
+}
+
+.update-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.update-dialog-placeholder {
+  padding: 12px 0;
+}
+
+.update-source-segment {
+  align-self: flex-start;
 }
 
 .active-source {

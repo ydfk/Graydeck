@@ -54,7 +54,12 @@ export function ArtifactUpdateDialog({
     }
 
     if (source === "url") {
-      onSubmitURL(url.trim());
+      const trimmed = url.trim();
+      if (!trimmed) {
+        setLocalError(t("update.urlEmpty"));
+        return;
+      }
+      onSubmitURL(trimmed);
       return;
     }
 
@@ -66,63 +71,83 @@ export function ArtifactUpdateDialog({
     onSubmitUpload(file);
   }
 
+  const sourceLabel: Record<UpdateSource, string> = {
+    auto: t("update.sourceAuto"),
+    url: t("update.sourceUrl"),
+    upload: t("update.sourceUpload"),
+  };
+
+  const sourceHint: Record<UpdateSource, string> = {
+    auto: t("update.sourceAutoHint"),
+    url: t("update.sourceUrlHint"),
+    upload: t("update.sourceUploadHint"),
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose} role="presentation">
-      <div className="modal-card" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="yaml-preview-header">
+      <div
+        className="modal-card update-dialog-card"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="update-dialog-header">
           <div>
-            <p className="mono-label">{title}</p>
-            <div className="table-primary">{t("update.submit")}</div>
+            <h2 className="update-dialog-title">{t("update.dialogTitle", { name: title })}</h2>
+            <p className="update-dialog-desc">{sourceHint[source]}</p>
           </div>
-          <button className="secondary-pill table-action-button" onClick={onClose} type="button">
+          <button className="secondary-pill" onClick={onClose} type="button">
             {t("common.close")}
           </button>
         </div>
 
-        <div className="update-source-row">
-          <button
-            className={source === "auto" ? "secondary-pill active-source" : "secondary-pill"}
-            onClick={() => setSource("auto")}
-            type="button"
-          >
-            {t("update.sourceAuto")}
-          </button>
-          <button
-            className={source === "url" ? "secondary-pill active-source" : "secondary-pill"}
-            onClick={() => setSource("url")}
-            type="button"
-          >
-            {t("update.sourceUrl")}
-          </button>
-          <button
-            className={source === "upload" ? "secondary-pill active-source" : "secondary-pill"}
-            onClick={() => setSource("upload")}
-            type="button"
-          >
-            {t("update.sourceUpload")}
-          </button>
+        <div className="segmented-control update-source-segment">
+          {(Object.keys(sourceLabel) as UpdateSource[]).map((key) => (
+            <button
+              className={source === key ? "segmented-button active" : "segmented-button"}
+              key={key}
+              onClick={() => setSource(key)}
+              type="button"
+            >
+              {sourceLabel[key]}
+            </button>
+          ))}
         </div>
 
-        {source === "url" ? (
-          <label className="login-field">
-            <span className="summary-label">{t("update.urlLabel")}</span>
-            <input className="table-input" onChange={(event) => setURL(event.target.value)} value={url} />
-          </label>
-        ) : null}
+        <div className="update-dialog-body">
+          {source === "auto" ? (
+            <p className="body-copy update-dialog-placeholder">{t("update.autoDescription")}</p>
+          ) : null}
 
-        {source === "upload" ? (
-          <label className="login-field">
-            <span className="summary-label">{t("update.fileLabel")}</span>
-            <input
-              accept={fileAccept}
-              className="table-input"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              type="file"
-            />
-          </label>
-        ) : null}
+          {source === "url" ? (
+            <label className="login-field">
+              <span className="summary-label">{t("update.urlLabel")}</span>
+              <input
+                autoFocus
+                className="table-input"
+                onChange={(event) => setURL(event.target.value)}
+                placeholder={t("update.urlPlaceholder")}
+                value={url}
+              />
+            </label>
+          ) : null}
 
-        {localError || errorMessage ? <div className="status-notice status-notice-error">{localError || errorMessage}</div> : null}
+          {source === "upload" ? (
+            <label className="login-field">
+              <span className="summary-label">{t("update.fileLabel")}</span>
+              <input
+                accept={fileAccept}
+                className="table-input"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                type="file"
+              />
+            </label>
+          ) : null}
+        </div>
+
+        {localError || errorMessage ? (
+          <div className="status-notice status-notice-error">{localError || errorMessage}</div>
+        ) : null}
 
         <button className="primary-pill login-submit" disabled={pending} onClick={handleSubmit} type="button">
           {pending ? t("common.loading") : t("update.submit")}
