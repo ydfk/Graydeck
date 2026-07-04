@@ -82,6 +82,16 @@ export function OverviewPage() {
     onError: (error) => setActionError(error instanceof Error ? error.message : t("status.error")),
   });
 
+  const updateGraydeckMutation = useMutation({
+    mutationFn: () => apiPost<SystemStatus>("/api/system/graydeck/update"),
+    onSuccess: async () => {
+      setActionError("");
+      await queryClient.invalidateQueries({ queryKey: ["system-status"] });
+      await queryClient.invalidateQueries({ queryKey: ["logs"] });
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : t("status.error")),
+  });
+
   const updateCoreMutation = useMutation({
     mutationFn: (payload?: { source: "auto" | "url"; url?: string }) => apiPost<SystemStatus>("/api/system/core/update", payload),
     onSuccess: async () => {
@@ -184,6 +194,11 @@ export function OverviewPage() {
 
   const coreActionLabel = systemStatus?.coreExecutableReady ? t("core.updateNow") : `${t("common.install")}${t("update.coreTitle")}`;
   const showCoreActionButton = !systemStatus?.coreExecutableReady || !systemStatus.coreIsLatest;
+  const showGraydeckActionButton = Boolean(
+    systemStatus?.graydeckUpdateSupported &&
+      systemStatus.graydeckLatestVersion &&
+      !systemStatus.graydeckIsLatest,
+  );
 
   function formatVersion(value: string, fallback: string) {
     if (!value) {
@@ -281,6 +296,16 @@ export function OverviewPage() {
                       </span>
                       {systemStatus.deploymentMode === "docker" && systemStatus.graydeckLatestVersion && !systemStatus.graydeckIsLatest ? (
                         <span className="table-secondary">{t("graydeck.dockerUpdateHint")}</span>
+                      ) : null}
+                      {showGraydeckActionButton ? (
+                        <button
+                          className="primary-pill table-action-button"
+                          disabled={updateGraydeckMutation.isPending}
+                          onClick={() => updateGraydeckMutation.mutate()}
+                          type="button"
+                        >
+                          {updateGraydeckMutation.isPending ? t("common.loading") : t("graydeck.updateNow")}
+                        </button>
                       ) : null}
                     </div>
                   </td>

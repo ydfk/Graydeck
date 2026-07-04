@@ -47,6 +47,7 @@ func (r *Router) registerRoutes() {
 	r.mux.HandleFunc("/api/system/start", r.requireAuthAPI(r.handleSystemStart))
 	r.mux.HandleFunc("/api/system/restart", r.requireAuthAPI(r.handleSystemRestart))
 	r.mux.HandleFunc("/api/system/stop", r.requireAuthAPI(r.handleSystemStop))
+	r.mux.HandleFunc("/api/system/graydeck/update", r.requireAuthAPI(r.handleSystemGraydeckUpdate))
 	r.mux.HandleFunc("/api/system/core/update", r.requireAuthAPI(r.handleSystemCoreUpdate))
 	r.mux.HandleFunc("/api/system/core/upload", r.requireAuthAPI(r.handleSystemCoreUpload))
 	r.mux.HandleFunc("/api/zashboard/update", r.requireAuthAPI(r.handleZashboardUpdate))

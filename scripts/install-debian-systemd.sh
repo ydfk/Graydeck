@@ -7,11 +7,13 @@ UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 SOURCE_BINARY="${1:-}"
 BINARY_PATH=""
 WORK_DIR=""
+SERVICE_TIMEZONE=""
 
 main() {
   require_root
   require_command systemctl
   require_binary
+  detect_timezone
 
   install_unit
   start_service
@@ -47,6 +49,20 @@ require_binary() {
   WORK_DIR="$(dirname "${BINARY_PATH}")"
 }
 
+detect_timezone() {
+  if command -v timedatectl >/dev/null 2>&1; then
+    SERVICE_TIMEZONE="$(timedatectl show -p Timezone --value 2>/dev/null || true)"
+  fi
+
+  if [[ -z "${SERVICE_TIMEZONE}" && -f /etc/timezone ]]; then
+    SERVICE_TIMEZONE="$(tr -d '[:space:]' </etc/timezone)"
+  fi
+
+  if [[ -z "${SERVICE_TIMEZONE}" ]]; then
+    SERVICE_TIMEZONE="UTC"
+  fi
+}
+
 install_unit() {
   cat >"${UNIT_PATH}" <<EOF
 [Unit]
@@ -58,6 +74,8 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=${WORK_DIR}
 ExecStart=${BINARY_PATH}
+Environment=TZ=${SERVICE_TIMEZONE}
+Environment=GRAYDECK_TIMEZONE=${SERVICE_TIMEZONE}
 Restart=on-failure
 RestartSec=3s
 

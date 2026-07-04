@@ -154,6 +154,7 @@ func (s *Service) RefreshAll(ctx context.Context) error {
 func (s *Service) Status() model.SystemStatus {
 	s.loadRuntimeConfigStatus()
 	s.loadAppConfigStatus()
+	s.loadGraydeckUpdateSupport()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -686,7 +687,7 @@ func (s *Service) updateSubscriptionStatus(id, status, reason string, previewAva
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	now := time.Now().Format("2006-01-02 15:04:05")
+	now := formatLocalTime(localNow())
 
 	for index := range s.subscriptions {
 		item := &s.subscriptions[index]
@@ -810,6 +811,7 @@ func (s *Service) loadInstalledVersions() {
 	if s.status.DeploymentMode == "" {
 		s.status.DeploymentMode = "standalone"
 	}
+	s.status.GraydeckUpdateSupported, _ = s.graydeckSelfUpdateSupported()
 	s.status.CoreVersion = coreVersion
 	s.status.ZashboardVersion = zashboardVersion
 	s.syncInstallStateLocked()
@@ -825,6 +827,14 @@ func (s *Service) loadRuntimeConfigStatus() {
 	s.status.RuntimeSocksPort = values.socksPort
 	s.status.RuntimeRedirPort = values.redirPort
 	s.status.RuntimeTProxyPort = values.tproxyPort
+}
+
+func (s *Service) loadGraydeckUpdateSupport() {
+	supported, _ := s.graydeckSelfUpdateSupported()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status.GraydeckUpdateSupported = supported
 }
 
 func (s *Service) setRuntimeStatus(status, reason string) {
@@ -973,7 +983,7 @@ func (s *Service) WebRoot() string {
 
 func appendLogEntry(current []model.LogEntry, message string) []model.LogEntry {
 	current = append(current, model.LogEntry{
-		At:      time.Now().Format("2006-01-02 15:04:05"),
+		At:      formatLocalTime(localNow()),
 		Message: message,
 	})
 

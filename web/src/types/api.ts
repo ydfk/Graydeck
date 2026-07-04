@@ -2,6 +2,7 @@ export type SystemStatus = {
   graydeckVersion: string;
   graydeckLatestVersion: string;
   graydeckIsLatest: boolean;
+  graydeckUpdateSupported: boolean;
   deploymentMode: "docker" | "standalone";
   runtimeStatus: string;
   runtimeError: string;

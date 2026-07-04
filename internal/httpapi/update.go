@@ -54,6 +54,21 @@ func (r *Router) handleSystemCoreUpdate(w http.ResponseWriter, req *http.Request
 	writeJSON(w, http.StatusOK, status)
 }
 
+func (r *Router) handleSystemGraydeckUpdate(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	status, err := r.service.UpdateGraydeck(req.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, status)
+}
+
 func (r *Router) handleSystemCoreUpload(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)

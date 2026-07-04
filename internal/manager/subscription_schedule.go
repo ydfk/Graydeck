@@ -32,7 +32,7 @@ func (s *Service) tickAutoSync() {
 	s.mu.RUnlock()
 
 	for _, subscription := range candidates {
-		if automaticSyncDue(subscription, time.Now()) {
+		if automaticSyncDue(subscription, localNow()) {
 			s.syncIfDue(subscription)
 		}
 	}
@@ -51,7 +51,7 @@ func automaticSyncDue(subscription model.Subscription, now time.Time) bool {
 		return true
 	}
 
-	lastSync, err := time.ParseInLocation("2006-01-02 15:04:05", subscription.LastSyncAt, time.Local)
+	lastSync, err := parseLocalTime(subscription.LastSyncAt)
 	if err != nil {
 		return true
 	}

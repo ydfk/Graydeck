@@ -16,27 +16,28 @@ type Subscription struct {
 }
 
 type SystemStatus struct {
-	GraydeckVersion        string `json:"graydeckVersion"`
-	GraydeckLatestVersion  string `json:"graydeckLatestVersion"`
-	GraydeckIsLatest       bool   `json:"graydeckIsLatest"`
-	DeploymentMode         string `json:"deploymentMode"`
-	RuntimeStatus          string `json:"runtimeStatus"`
-	RuntimeError           string `json:"runtimeError"`
-	CurrentConfigName      string `json:"currentConfigName"`
-	RuntimeMixedPort       string `json:"runtimeMixedPort"`
-	RuntimeSocksPort       string `json:"runtimeSocksPort"`
-	RuntimeRedirPort       string `json:"runtimeRedirPort"`
-	RuntimeTProxyPort      string `json:"runtimeTProxyPort"`
-	CoreVersion            string `json:"coreVersion"`
-	CoreLatestVersion      string `json:"coreLatestVersion"`
-	CoreIsLatest           bool   `json:"coreIsLatest"`
-	CoreExecutableReady    bool   `json:"coreExecutableReady"`
-	ZashboardVersion       string `json:"zashboardVersion"`
-	ZashboardLatestVersion string `json:"zashboardLatestVersion"`
-	ZashboardIsLatest      bool   `json:"zashboardIsLatest"`
-	ZashboardReady         bool   `json:"zashboardReady"`
-	ZashboardError         string `json:"zashboardError"`
-	ZashboardHideSettings  bool   `json:"zashboardHideSettings"`
+	GraydeckVersion         string `json:"graydeckVersion"`
+	GraydeckLatestVersion   string `json:"graydeckLatestVersion"`
+	GraydeckIsLatest        bool   `json:"graydeckIsLatest"`
+	GraydeckUpdateSupported bool   `json:"graydeckUpdateSupported"`
+	DeploymentMode          string `json:"deploymentMode"`
+	RuntimeStatus           string `json:"runtimeStatus"`
+	RuntimeError            string `json:"runtimeError"`
+	CurrentConfigName       string `json:"currentConfigName"`
+	RuntimeMixedPort        string `json:"runtimeMixedPort"`
+	RuntimeSocksPort        string `json:"runtimeSocksPort"`
+	RuntimeRedirPort        string `json:"runtimeRedirPort"`
+	RuntimeTProxyPort       string `json:"runtimeTProxyPort"`
+	CoreVersion             string `json:"coreVersion"`
+	CoreLatestVersion       string `json:"coreLatestVersion"`
+	CoreIsLatest            bool   `json:"coreIsLatest"`
+	CoreExecutableReady     bool   `json:"coreExecutableReady"`
+	ZashboardVersion        string `json:"zashboardVersion"`
+	ZashboardLatestVersion  string `json:"zashboardLatestVersion"`
+	ZashboardIsLatest       bool   `json:"zashboardIsLatest"`
+	ZashboardReady          bool   `json:"zashboardReady"`
+	ZashboardError          string `json:"zashboardError"`
+	ZashboardHideSettings   bool   `json:"zashboardHideSettings"`
 }
 
 type SubscriptionPreview struct {
